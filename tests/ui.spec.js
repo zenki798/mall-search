@@ -1,8 +1,6 @@
 // 화면 동작 — 검색 링크, 페이지 안에서 넘겨보기, 새 창, 모두 새 탭으로, 체크 유지, 카테고리, 최근 검색
 const { test, expect } = require('@playwright/test');
-const { trackErrors, stubOpen, stubMalls, openApp, opened, nav, malls, urlOf, frameSrc, inPage } = require('./helpers');
-
-const isWide = page => page.viewportSize().width >= 900;
+const { trackErrors, stubOpen, stubMalls, openApp, opened, nav, malls, urlOf, frameSrc, inPage, split, touch, windowed } = require('./helpers');
 
 test('처음 열면 에러 없이 모든 쇼핑몰이 보이고, 검색어 전에는 링크·버튼이 비활성이다', async ({ page }) => {
   const errors = trackErrors(page);
@@ -144,7 +142,7 @@ test.describe('페이지 안에서 넘겨보기', () => {
     expect(await opened(page)).toEqual([]);
   });
 
-  test('새 창 전용 쇼핑몰을 누르면 새 창으로 연다 — PC 는 창 하나를 재사용하고 앞으로 가져온다', async ({ page }) => {
+  test('새 창 전용 쇼핑몰을 누르면 새 창으로 연다 — PC 는 창 하나를 재사용하고 앞으로 가져오며, 휴대폰·태블릿은 매번 탭으로 연다', async ({ page }) => {
     await openApp(page, '빼빼로');
     const all = await malls(page);
     const naver = all.find(m => m.id === 'naver');
@@ -153,14 +151,14 @@ test.describe('페이지 안에서 넘겨보기', () => {
     await page.click('.mall-link[data-link="enuri"]');
     await expect(page.locator('#panel')).toBeHidden();
     const calls = await opened(page);
-    if (isWide(page)) {
+    if (await windowed(page)) {
       expect(calls).toHaveLength(1);
       expect(calls[0].name).toBe('mallsearch-viewer');
       expect(calls[0].features).toContain('popup');
       expect(await nav(page)).toEqual([urlOf(naver, '빼빼로'), urlOf(enuri, '빼빼로')]);
       expect(await page.evaluate(() => window.__focused)).toBe(2);
     } else {
-      // 휴대폰: 누를 때마다 새로 연다 (겹쳐 뜨고, 닫으면 돌아온다)
+      // 휴대폰·태블릿: 누를 때마다 새로 연다. 탭만 있는 기기에서 창을 재사용하면 두 번째부터 뒤쪽 탭만 바뀐다
       expect(calls.map(c => [c.url, c.name])).toEqual([[urlOf(naver, '빼빼로'), '_blank'], [urlOf(enuri, '빼빼로'), '_blank']]);
     }
   });
@@ -172,7 +170,7 @@ test.describe('페이지 안에서 넘겨보기', () => {
     await page.click('#open-external');
     const calls = await opened(page);
     expect(calls).toHaveLength(1);
-    expect(isWide(page) ? (await nav(page))[0] : calls[0].url).toBe(urlOf(first, '빼빼로'));
+    expect((await windowed(page)) ? (await nav(page))[0] : calls[0].url).toBe(urlOf(first, '빼빼로'));
     await expect(page.locator('#panel')).toBeVisible();      // 패널은 그대로
   });
 
@@ -203,16 +201,25 @@ test.describe('페이지 안에서 넘겨보기', () => {
     await expect(page.locator('#frame-loading')).toBeHidden({ timeout: 4000 });
   });
 
-  test('판별하지 못한 쇼핑몰(쿠팡)은 패널에 띄우되 "안 보이면 새 창" 안내를 붙인다', async ({ page }) => {
+  test('판별하지 못한 쇼핑몰(SSG닷컴)은 패널에 띄우되 "오류 화면이 보이면 새 창" 안내를 붙인다', async ({ page }) => {
     await openApp(page, '빼빼로');
-    await page.click('#view-start');
-    await page.click('#next');                                   // 다나와 다음 = 쿠팡
-    await expect(page.locator('#viewer-name')).toHaveText('쿠팡');
+    await page.click('.mall-link[data-link="ssg"]');
+    await expect(page.locator('#viewer-name')).toHaveText('SSG닷컴');
     await expect(page.locator('#frame')).toBeVisible();
     await expect(page.locator('#frame-unverified')).toBeVisible();
+    await expect(page.locator('#frame-unverified')).toContainText('사용 권한이 없습니다');
     await expect(page.locator('#frame-unverified')).toContainText('↗ 새 창');
-    await page.click('#next');                                   // 11번가 (확인된 곳) → 안내 없음
+    await page.click('#next');                                   // 롯데ON (확인된 곳) → 안내 없음
+    await expect(page.locator('#viewer-name')).toHaveText('롯데ON');
     await expect(page.locator('#frame-unverified')).toBeHidden();
+  });
+
+  test('쿠팡은 사용자 확인으로 새 창 전용이다 — 누르면 패널이 아니라 새 창으로 연다', async ({ page }) => {
+    await openApp(page, '빼빼로');
+    await expect(page.locator('.mall-link[data-link="coupang"] .ext')).toHaveCount(1);
+    await page.click('.mall-link[data-link="coupang"]');
+    await expect(page.locator('#panel')).toBeHidden();
+    expect(await opened(page)).toHaveLength(1);
   });
 
   test('패널의 iframe 은 쇼핑몰이 이 페이지를 다른 곳으로 이동시키지 못하게 제한(sandbox)된다', async ({ page }) => {
@@ -224,12 +231,12 @@ test.describe('페이지 안에서 넘겨보기', () => {
     expect(flags).toEqual(expect.arrayContaining(['allow-scripts', 'allow-same-origin', 'allow-popups', 'allow-popups-to-escape-sandbox']));
   });
 
-  test('넓은 화면은 목록 옆에 패널이 붙고, 좁은 화면(휴대폰)은 패널이 화면 전체를 덮는다', async ({ page }) => {
+  test('넓은 화면(PC·태블릿 가로)은 목록 옆에 패널이 붙고, 좁은 화면(휴대폰)은 패널이 화면 전체를 덮는다', async ({ page }) => {
     await openApp(page, '빼빼로');
     await page.click('#view-start');
     const vp = page.viewportSize();
     const box = await page.locator('#panel').boundingBox();
-    if (vp.width >= 900) {
+    if (await split(page)) {
       expect(box.x).toBeGreaterThanOrEqual(320);                 // 왼쪽에 목록 기둥
       expect(Math.round(box.x + box.width)).toBe(vp.width);
       expect(Math.round(box.height)).toBe(vp.height);
@@ -239,6 +246,45 @@ test.describe('페이지 안에서 넘겨보기', () => {
       expect(Math.round(box.y)).toBe(0);
       expect(Math.round(box.width)).toBe(vp.width);
       expect(Math.round(box.height)).toBe(vp.height);
+    }
+  });
+});
+
+test.describe('화면 크기·입력 방식에 맞춘 표시', () => {
+  test.beforeEach(async ({ page }) => {
+    await stubMalls(page);
+    await stubOpen(page);
+  });
+
+  test('큰 휴대폰을 가로로 돌리면(폭 932 × 높이 430) 폭이 넓어도 비좁게 나누지 않고 전체 화면으로 덮는다', async ({ page }) => {
+    await page.setViewportSize({ width: 932, height: 430 });
+    await openApp(page, '빼빼로');
+    await page.click('#view-start');
+    const box = await page.locator('#panel').boundingBox();
+    expect(Math.round(box.x)).toBe(0);
+    expect(Math.round(box.width)).toBe(932);
+  });
+
+  test('"← → 키로 넘기고 Esc 로 닫습니다" 안내는 분할 화면이면서 마우스가 있는 기기(PC)에만 보인다', async ({ page }) => {
+    await openApp(page, '빼빼로');
+    await page.click('#view-start');
+    const showTip = (await split(page)) && !(await touch(page));
+    if (showTip) await expect(page.locator('#viewer-tip')).toBeVisible();
+    else await expect(page.locator('#viewer-tip')).toBeHidden();
+  });
+
+  test('터치 기기에서는 결과 화면 위쪽 버튼이 손가락으로 누르기 쉬운 크기(44px 이상)다', async ({ page }) => {
+    await openApp(page, '빼빼로');
+    await page.click('#view-start');
+    const isTouch = await touch(page);
+    for (const id of ['#prev', '#next', '#open-external', '#viewer-close']) {
+      const box = await page.locator(id).boundingBox();
+      if (isTouch) {
+        expect(box.height, id).toBeGreaterThanOrEqual(44);
+        expect(box.width, id).toBeGreaterThanOrEqual(44);
+      } else {
+        expect(box.height, id).toBeGreaterThan(20);           // PC 는 원래 크기
+      }
     }
   });
 });
@@ -271,19 +317,19 @@ test('체크를 풀면 대상에서 빠지고, 새로고침해도 유지된다',
   await stubOpen(page);
   await openApp(page, '의자');
   const all = await malls(page);
-  await page.uncheck('[data-pick="coupang"]');   // 넘겨보기 대상
+  await page.uncheck('[data-pick="lotteon"]');   // 넘겨보기 대상
   await page.uncheck('[data-pick="ikea"]');      // 새 창 전용 (넘겨보기 대상 아님)
-  await expect(page.locator('.mall[data-mall="coupang"]')).toHaveClass(/off/);
+  await expect(page.locator('.mall[data-mall="lotteon"]')).toHaveClass(/off/);
   await expect(page.locator('#view-start')).toHaveText(`${inPage(all).length - 1}곳 넘겨보기`);
 
   await page.reload();
   await page.waitForFunction(() => window.__ready === true);
-  await expect(page.locator('[data-pick="coupang"]')).not.toBeChecked();
+  await expect(page.locator('[data-pick="lotteon"]')).not.toBeChecked();
   await expect(page.locator('[data-pick="ikea"]')).not.toBeChecked();
   await page.click('#open-tabs');
   const urls = (await opened(page)).map(c => c.url);
   expect(urls).toHaveLength(all.length - 2);
-  expect(urls.some(u => u.includes('coupang.com') || u.includes('ikea.com'))).toBe(false);
+  expect(urls.some(u => u.includes('lotteon.com') || u.includes('ikea.com'))).toBe(false);
 });
 
 test('카테고리를 고르면 그 카테고리를 다루는 쇼핑몰만 보이고, 그곳만 대상이 된다', async ({ page }) => {

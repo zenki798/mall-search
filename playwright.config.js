@@ -27,6 +27,12 @@ module.exports = defineConfig({
       name: 'mobile-chromium',
       use: { ...devices['Pixel 5'] },
     },
+    {
+      // 아이패드 같은 가로형 태블릿: PC 처럼 분할 화면이지만 터치 전용이다.
+      // 기기 목록의 기본 엔진은 webkit 이지만, CI 에는 chromium 만 설치하므로 화면 크기·터치만 흉내 낸다.
+      name: 'tablet-landscape',
+      use: { ...devices['iPad Pro 11 landscape'], browserName: 'chromium' },
+    },
   ],
 
   webServer: {

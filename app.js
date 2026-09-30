@@ -66,7 +66,14 @@
   const targets = () => visible().filter(m => !state.off.has(m.id));
   // 넘겨보기 순서: 체크한 곳. 새 창 전용은 "포함" 을 켰을 때만 넣는다.
   const route = () => targets().filter(m => state.includeExternal || !external(m));
-  const narrow = () => window.matchMedia('(max-width: 899px)').matches;
+  // 넓고 충분히 높은 화면: 목록 옆에 패널을 붙인다 (index.html 의 같은 조건과 맞춘다).
+  // 높이 조건은 큰 휴대폰을 가로로 돌렸을 때(폭 900 넘음, 높이 430 안팎) 분할되지 않게 하려는 것이다.
+  const SPLIT_MQ = '(min-width: 900px) and (min-height: 540px)';
+  // 터치 전용 기기(휴대폰·태블릿). 아이패드 사파리는 창을 따로 띄우지 못하고 탭으로 연다.
+  const TOUCH_MQ = '(hover: none) and (pointer: coarse)';
+  // 새 창을 "누를 때마다 탭으로" 열지, PC 처럼 "창 하나 재사용" 할지.
+  // 탭만 있는 기기에서 창을 재사용하면 두 번째부터는 뒤쪽 탭만 바뀌어 아무 일도 없는 것처럼 보인다.
+  const opensInTabs = () => APP_MODE || !window.matchMedia(SPLIT_MQ).matches || window.matchMedia(TOUCH_MQ).matches;
 
   // ── 렌더링 ──
   function drawCategories() {
@@ -273,13 +280,13 @@
   }
 
   // 페이지 안에 띄울 수 없는 쇼핑몰(또는 사용자가 "새 창" 을 누른 곳)을 연다.
-  // - 앱·휴대폰: 누를 때마다 새로 연다(앱 위에 겹쳐 뜨고, 닫으면 돌아온다)
+  // - 앱·휴대폰·태블릿: 누를 때마다 새로 연다(앱 위에 겹쳐 뜨거나 새 탭으로 가고, 닫으면 돌아온다)
   // - PC: 창 하나를 계속 재사용한다. opener 를 끊지 않는다 — 끊으면 크롬이 다른 사이트로 넘어간
   //   창을 다시 이동시키지 못하게 막는다 (AGENTS.md 3항 "새 창과 opener").
   function openExternal(mall) {
     if (!state.query || !mall) return false;
     const url = M.searchUrl(mall, state.query);
-    if (APP_MODE || narrow()) {
+    if (opensInTabs()) {
       const w = window.open(url, '_blank');
       if (!w) return popupBlocked();
       try { w.opener = null; } catch (e) { /* 무시 */ }
@@ -423,8 +430,12 @@
     $('install-bar').hidden = true;
     try { localStorage.setItem(INSTALL_KEY, 'off'); } catch (e) { /* 무시 */ }
   });
-  if (/iPhone|iPad|iPod/.test(navigator.userAgent) && /^https:$/.test(location.protocol)) {
-    showInstall('앱처럼 쓰려면: 사파리 아래쪽 공유 버튼(□↑) → "홈 화면에 추가"', false);
+  // 아이패드 사파리는 기본으로 Mac 처럼 자신을 밝힌다(User-Agent 에 iPad 가 없다) → 터치 지점 수로 가려낸다.
+  const IPAD = /iPad/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const IOS = IPAD || /iPhone|iPod/.test(navigator.userAgent);
+  // file:// 로 연 페이지는 홈 화면에 추가해도 소용없다. (크롬은 file:// 도 isSecureContext 로 보므로 따로 뺀다)
+  if (IOS && window.isSecureContext && location.protocol !== 'file:') {
+    showInstall(`앱처럼 쓰려면: 사파리 ${IPAD ? '오른쪽 위' : '아래쪽'} 공유 버튼(□↑) → "홈 화면에 추가"`, false);
   }
 
   // 서비스 워커: 설치 조건을 채우고 오프라인에서도 화면을 띄운다. file:// 에서는 쓸 수 없다.

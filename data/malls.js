@@ -32,7 +32,8 @@
     { id: 'danawa', name: '다나와', group: 'compare', cats: ALL, frame: true, url: 'https://search.danawa.com/dsearch.php?query={q}' },
     { id: 'enuri', name: '에누리', group: 'compare', cats: ALL, frame: false, url: 'https://price.enuri.com/search?keyword={q}' },
 
-    { id: 'coupang', name: '쿠팡', group: 'open', cats: ALL, url: 'https://www.coupang.com/np/search?q={q}', blocked: true },
+    // 쿠팡: 자동 확인은 늘 차단(403)돼 판별 불가였으나, 사용자 브라우저의 패널에서 "사용 권한이 없습니다" 화면 확인 (2026-09-30)
+    { id: 'coupang', name: '쿠팡', group: 'open', cats: ALL, frame: false, url: 'https://www.coupang.com/np/search?q={q}', blocked: true },
     { id: 'gmarket', name: 'G마켓', group: 'open', cats: ALL, frame: false, url: 'https://www.gmarket.co.kr/n/search?keyword={q}', blocked: true },
     { id: 'auction', name: '옥션', group: 'open', cats: ALL, frame: false, url: 'https://www.auction.co.kr/n/search?keyword={q}' },
     { id: '11st', name: '11번가', group: 'open', cats: ALL, frame: true, url: 'https://search.11st.co.kr/pc/total-search?kwd={q}' },

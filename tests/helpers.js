@@ -60,4 +60,12 @@ const frameSrc = page => page.locator('#frame').getAttribute('src');
 // 기본 넘겨보기 순서: 새 창 전용(frame: false)은 뺀다
 const inPage = list => list.filter(m => m.frame !== false);
 
-module.exports = { trackErrors, stubOpen, stubMalls, openApp, opened, nav, malls, urlOf, frameSrc, inPage };
+// 화면 종류 (app.js 의 SPLIT_MQ·TOUCH_MQ 와 같은 기준)
+//   split   : 목록 옆에 패널이 붙는 넓고 높은 화면 (PC·태블릿 가로)
+//   touch   : 터치 전용 기기 (휴대폰·태블릿)
+//   windowed: 새 창을 "창 하나 재사용" 으로 여는 PC. 그 밖에는 누를 때마다 탭으로 연다
+const split = page => page.evaluate(() => matchMedia('(min-width: 900px) and (min-height: 540px)').matches);
+const touch = page => page.evaluate(() => matchMedia('(hover: none) and (pointer: coarse)').matches);
+const windowed = async page => (await split(page)) && !(await touch(page));
+
+module.exports = { trackErrors, stubOpen, stubMalls, openApp, opened, nav, malls, urlOf, frameSrc, inPage, split, touch, windowed };

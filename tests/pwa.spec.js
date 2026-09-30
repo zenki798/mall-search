@@ -153,3 +153,36 @@ test.describe('설치 안내 (브라우저로 볼 때)', () => {
     await expect(page.locator('#install-bar')).toBeHidden();
   });
 });
+
+test.describe('아이폰·아이패드 설치 안내 (사파리에는 설치 버튼이 없어 글로 안내한다)', () => {
+  // 페이지 스크립트가 보는 기기 정보를 바꾼다. 아이패드 사파리는 기본으로 Mac 처럼 자신을 밝힌다.
+  async function asDevice(page, { ua, platform, touchPoints }) {
+    await page.addInitScript(([u, p, t]) => {
+      Object.defineProperty(Navigator.prototype, 'userAgent', { get: () => u });
+      Object.defineProperty(Navigator.prototype, 'platform', { get: () => p });
+      Object.defineProperty(Navigator.prototype, 'maxTouchPoints', { get: () => t });
+    }, [ua, platform, touchPoints]);
+    await page.goto('/');
+    await page.waitForFunction(() => window.__ready === true);
+  }
+  const MAC_SAFARI = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15';
+  const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+
+  test('아이폰: 아래쪽 공유 버튼으로 홈 화면에 추가하라고 안내한다', async ({ page }) => {
+    await asDevice(page, { ua: IPHONE, platform: 'iPhone', touchPoints: 5 });
+    await expect(page.locator('#install-bar')).toBeVisible();
+    await expect(page.locator('#install-text')).toContainText('아래쪽 공유 버튼');
+    await expect(page.locator('#install-btn')).toBeHidden();
+  });
+
+  test('아이패드(사파리가 Mac 처럼 밝혀도): 오른쪽 위 공유 버튼으로 안내한다', async ({ page }) => {
+    await asDevice(page, { ua: MAC_SAFARI, platform: 'MacIntel', touchPoints: 5 });
+    await expect(page.locator('#install-bar')).toBeVisible();
+    await expect(page.locator('#install-text')).toContainText('오른쪽 위 공유 버튼');
+  });
+
+  test('진짜 Mac(터치 없음)에는 안내하지 않는다', async ({ page }) => {
+    await asDevice(page, { ua: MAC_SAFARI, platform: 'MacIntel', touchPoints: 0 });
+    await expect(page.locator('#install-bar')).toBeHidden();
+  });
+});

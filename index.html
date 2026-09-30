@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>쇼핑몰 한번에 검색</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --panel: #ffffff;
+    --text: #1d2129;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --accent: #0b6bcb;
+    --accent-soft: #e7f1fc;
+    --warn-bg: #fff9db;
+    --warn-line: #f0c36d;
+    --ok-bg: #ebfbee;
+    --ok-line: #8ce99a;
+    --shadow: 0 1px 2px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111418; --panel: #1a1e24; --text: #e7e9ec; --muted: #9aa1ab; --line: #2c323b;
+      --accent: #5aa9f5; --accent-soft: #1b2a3b; --warn-bg: #2d2714; --warn-line: #7a6320;
+      --ok-bg: #15291a; --ok-line: #2f6b3a; --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 -apple-system, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    word-break: keep-all;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 16px 48px; }
+  header.top { padding: 28px 0 14px; }
+  header.top h1 { margin: 0; font-size: 26px; letter-spacing: -.02em; }
+  header.top p { margin: 4px 0 0; color: var(--muted); }
+
+  #search-form { display: flex; gap: 8px; }
+  #q {
+    flex: 1; min-width: 0; font: inherit; font-size: 17px; padding: 12px 14px;
+    border: 2px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--text);
+  }
+  #q:focus { outline: none; border-color: var(--accent); }
+  #view-start {
+    font: inherit; font-weight: 700; padding: 0 18px; border: 0; border-radius: 12px;
+    background: var(--accent); color: #fff; cursor: pointer; white-space: nowrap;
+  }
+  #view-start:disabled { opacity: .45; cursor: not-allowed; }
+  .sub-actions { margin-top: 6px; text-align: right; }
+  #open-tabs { font: inherit; font-size: 13px; border: 0; background: none; color: var(--muted); text-decoration: underline; cursor: pointer; padding: 2px; }
+  #open-tabs:disabled { opacity: .5; cursor: not-allowed; text-decoration: none; }
+
+  .viewer {
+    position: sticky; top: 0; z-index: 5; margin: 14px 0 0; padding: 12px 14px;
+    background: var(--panel); border: 2px solid var(--accent); border-radius: 12px; box-shadow: var(--shadow);
+    display: grid; gap: 8px;
+  }
+  .viewer .pos { font-variant-numeric: tabular-nums; color: var(--muted); }
+  .viewer-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+  .viewer-btns button {
+    font: inherit; font-weight: 700; padding: 7px 14px; border-radius: 10px; cursor: pointer;
+    border: 0; background: var(--accent); color: #fff;
+  }
+  .viewer-btns button:disabled { opacity: .4; cursor: not-allowed; }
+  .viewer-btns .ghost { background: none; border: 1px solid var(--line); color: var(--muted); font-weight: 400; }
+  .viewer-tip { font-size: 12px; color: var(--muted); }
+  .mall.current { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+
+  /* 넘겨보기 중: 결과 창이 화면 오른쪽을 차지하므로 목록을 왼쪽에 붙인다 */
+  body.viewing .wrap { max-width: none; width: 34vw; min-width: 300px; margin: 0; }
+  body.viewing .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  body.viewing header.top p, body.viewing footer { display: none; }
+
+  .recent { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+  .recent button {
+    font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--text);
+    border-radius: 999px; padding: 2px 10px; cursor: pointer;
+  }
+  .recent .clear { border: 0; background: none; color: var(--muted); text-decoration: underline; padding: 2px 4px; }
+
+  .note { margin: 14px 0 0; padding: 10px 14px; border-radius: 10px; font-size: 14px; border: 1px solid; }
+  .note.warn { background: var(--warn-bg); border-color: var(--warn-line); }
+  .note.ok { background: var(--ok-bg); border-color: var(--ok-line); }
+
+  .bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin: 20px 0 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    font: inherit; font-size: 14px; padding: 6px 12px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  }
+  .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .bulk { display: flex; gap: 10px; font-size: 13px; }
+  .bulk button { font: inherit; border: 0; background: none; color: var(--accent); cursor: pointer; padding: 2px; }
+
+  .group h2 { font-size: 14px; color: var(--muted); margin: 18px 0 8px; font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+  .mall {
+    display: flex; align-items: stretch; background: var(--panel); border-radius: 12px;
+    box-shadow: var(--shadow); border: 1px solid transparent; overflow: hidden;
+  }
+  .mall.off { opacity: .55; }
+  .pick { display: flex; align-items: center; padding: 0 4px 0 14px; cursor: pointer; }
+  .pick input { width: 17px; height: 17px; accent-color: var(--accent); cursor: pointer; }
+  .mall-link {
+    flex: 1; display: flex; flex-direction: column; padding: 12px 14px 12px 8px;
+    color: var(--text); text-decoration: none; min-width: 0;
+  }
+  .mall-link strong { font-size: 16px; }
+  .mall-link span { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mall-link[href]:hover { background: var(--accent-soft); }
+  .mall-link[href]:hover span { color: var(--accent); }
+  .mall-link[aria-disabled="true"] { cursor: default; }
+
+  footer { margin-top: 32px; font-size: 13px; color: var(--muted); line-height: 1.7; }
+
+  @media (max-width: 560px) {
+    header.top h1 { font-size: 22px; }
+    #search-form { flex-wrap: wrap; }
+    #view-start { width: 100%; padding: 12px; }
+    .grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .pick { padding-left: 10px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>쇼핑몰 한번에 검색</h1>
+    <p>검색어 하나로 가격비교·오픈마켓·전문몰의 검색 결과를 바로 엽니다.</p>
+  </header>
+
+  <form id="search-form" role="search">
+    <input id="q" type="search" autocomplete="off" placeholder="상품명을 입력하세요 (예: 빼빼로)" aria-label="검색어">
+    <button type="submit" id="view-start">한 창에서 넘겨보기</button>
+  </form>
+  <div class="sub-actions">
+    <button type="button" id="open-tabs">모두 새 탭으로 열기</button>
+  </div>
+  <div id="recent" class="recent" hidden></div>
+  <div id="notice" class="note" role="status" hidden></div>
+
+  <div id="viewer" class="viewer" role="region" aria-label="넘겨보기" hidden>
+    <div class="viewer-now"><span id="viewer-pos" class="pos"></span> <strong id="viewer-name"></strong> 표시 중</div>
+    <div class="viewer-btns">
+      <button type="button" id="prev">◀ 이전</button>
+      <button type="button" id="next">다음 ▶</button>
+      <button type="button" id="viewer-close" class="ghost">결과 창 닫기</button>
+    </div>
+    <div class="viewer-tip">← → 키로도 넘길 수 있습니다. 아래 쇼핑몰 이름을 누르면 그곳으로 바로 갑니다.</div>
+  </div>
+
+  <div class="bar">
+    <nav id="categories" class="chips" aria-label="카테고리"></nav>
+    <div class="bulk">
+      <button type="button" id="select-all">모두 선택</button>
+      <button type="button" id="select-none">모두 해제</button>
+    </div>
+  </div>
+
+  <main id="malls"></main>
+
+  <footer>
+    <strong>한 창에서 넘겨보기</strong>(Enter)는 결과 창을 하나만 띄우고, 체크한 쇼핑몰을 ◀ ▶ 로 차례로 보여 줍니다.
+    결과 창이 열려 있을 때 쇼핑몰 이름을 누르면 그 창에서 보이고, Ctrl+클릭하면 새 탭으로 열립니다.<br>
+    <strong>모두 새 탭으로 열기</strong>는 체크한 곳을 한꺼번에 여는데, 브라우저가 팝업을 막으면 첫 탭만 열립니다.
+    이때 주소창 오른쪽의 팝업 차단 아이콘에서 "항상 허용"을 고르고 다시 누르세요.<br>
+    이 페이지는 가격을 가져오거나 저장하지 않습니다. 각 쇼핑몰 검색 주소로 연결만 합니다.
+  </footer>
+</div>
+
+<script src="data/malls.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

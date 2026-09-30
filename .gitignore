@@ -1,0 +1,31 @@
+# 의존성
+node_modules/
+
+# 테스트 산출물
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
+# 인증·개인정보 (AGENTS.md 규칙 2)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.json
+credentials.json
+
+# 수집한 원본 응답 캐시 — 커밋하지 않는다
+cache/
+*.raw.json
+
+# OS·에디터
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
+*.log

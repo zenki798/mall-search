@@ -8,7 +8,8 @@ async function pointMallsToFixture(page) {
   await page.waitForFunction(() => window.__ready === true);
   await page.evaluate(() => {
     const base = 'http://127.0.0.1:' + location.port + '/tests/fixtures/mall.html?m=';
-    window.Malls.malls.forEach((m, i) => { m.url = base + i + '&q={q}'; });
+    // 휴대폰 전용 주소도 테스트용 페이지로 바꾼다 (휴대폰 화면 테스트에서 실제 쇼핑몰에 접속하지 않도록)
+    window.Malls.malls.forEach((m, i) => { m.url = base + i + '&q={q}'; if (m.mobileUrl) m.mobileUrl = m.url; });
   });
 }
 const fixtureFrame = page => page.frames().find(f => f.url().includes('/tests/fixtures/mall.html'));

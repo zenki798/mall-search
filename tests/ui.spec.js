@@ -384,3 +384,24 @@ test('?q= 주소로 열면 그 검색어로 시작한다 (패널·창은 자동�
   await expect(page.locator('#panel')).toBeHidden();
   expect(await opened(page)).toEqual([]);
 });
+
+test('휴대폰에서는 쇼핑몰 링크·패널이 휴대폰 전용 주소를 쓴다 (아이폰)', async ({ page }) => {
+  const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+  await page.addInitScript(u => { Object.defineProperty(Navigator.prototype, 'userAgent', { get: () => u }); }, IPHONE);
+  await stubMalls(page);
+  await openApp(page, '빼빼로');
+  await expect(page.locator('.mall-link[data-link="daiso"]'))
+    .toHaveAttribute('href', 'https://m.daisomall.co.kr/main/ds/dsl/SCR_DSL_0015?searchTerm=' + encodeURIComponent('빼빼로'));
+  await expect(page.locator('.mall-link[data-link="lotteon"]')).toHaveAttribute('href', /platform=m&/);
+  await page.click('.mall-link[data-link="lotteon"]');
+  await expect(page.locator('#frame')).toHaveAttribute('src', /platform=m&/);
+});
+
+test('PC 에서는 PC 주소를 쓴다', async ({ page }) => {
+  const WIN = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+  await page.addInitScript(u => { Object.defineProperty(Navigator.prototype, 'userAgent', { get: () => u }); }, WIN);
+  await openApp(page, '빼빼로');
+  await expect(page.locator('.mall-link[data-link="daiso"]'))
+    .toHaveAttribute('href', 'https://www.daisomall.co.kr/ds/dst/SCR_DST_0015?searchTerm=' + encodeURIComponent('빼빼로'));
+  await expect(page.locator('.mall-link[data-link="lotteon"]')).toHaveAttribute('href', /platform=pc&/);
+});

@@ -6,7 +6,11 @@
    frame        — 이 페이지 안(iframe)에 표시되는가. 2026-09-30 실측 (AGENTS.md 3항 "페이지 안에서 넘겨보기")
      true  : 표시된다 → 넘겨보기 패널 안에 띄운다
      false : 쇼핑몰이 X-Frame-Options / frame-ancestors 로 거부한다 → 새 창으로 연다
-     없음  : 판별하지 못했다(자동 접속 차단) → 패널에 띄워 보고, 안 되면 "새 창" 을 누르라고 안내한다 */
+     없음  : 판별하지 못했다(자동 접속 차단) → 패널에 띄워 보고, 안 되면 "새 창" 을 누르라고 안내한다
+   mobileUrl · mobileWhen — 휴대폰에는 다른 주소를 써야 하는 쇼핑몰 (AGENTS.md 3항 "기기별 주소")
+     브라우저 정보(User-Agent)가 mobileWhen(정규식)에 걸리면 mobileUrl 을 쓴다. 쇼핑몰마다 "휴대폰" 으로
+     보는 기준이 달라서, 각 쇼핑몰이 실제로 휴대폰 주소로 넘기는 조건을 실측해 그대로 적는다.
+     기기와 안 맞는 주소를 주면 쇼핑몰이 넘겨주기를 하는데, 페이지 안(iframe)에서는 그 과정이 막혀 빈 화면이 된다. */
 (function (global) {
   'use strict';
 
@@ -39,7 +43,11 @@
     { id: '11st', name: '11번가', group: 'open', cats: ALL, frame: true, url: 'https://search.11st.co.kr/pc/total-search?kwd={q}' },
 
     { id: 'ssg', name: 'SSG닷컴', group: 'mall', cats: ALL, url: 'https://www.ssg.com/search.ssg?target=all&query={q}', blocked: true },
-    { id: 'lotteon', name: '롯데ON', group: 'mall', cats: ALL, frame: true, url: 'https://www.lotteon.com/csearch/search/search?render=search&platform=pc&q={q}' },
+    // 롯데ON: 안드로이드면 태블릿(Mobile 표시 없음)도 휴대폰 주소(platform=m)로 넘긴다 (2026-09-30 실측)
+    { id: 'lotteon', name: '롯데ON', group: 'mall', cats: ALL, frame: true,
+      url: 'https://www.lotteon.com/csearch/search/search?render=search&platform=pc&q={q}',
+      mobileUrl: 'https://www.lotteon.com/csearch/search/search?render=search&platform=m&q={q}',
+      mobileWhen: 'iPhone|iPod|iPad|Android' },
     { id: 'gsshop', name: 'GS SHOP', group: 'mall', cats: ALL, frame: true, url: 'https://www.gsshop.com/shop/search/main.gs?tq={q}' },
     { id: 'cjonstyle', name: 'CJ온스타일', group: 'mall', cats: ALL, frame: true, url: 'https://display.cjonstyle.com/p/search/searchAllList?k={q}' },
 
@@ -47,7 +55,13 @@
     { id: 'homeplus', name: '홈플러스', group: 'specialty', cats: ['food', 'goods'], frame: true, url: 'https://front.homeplus.co.kr/search?entry=direct&keyword={q}' },
     { id: 'kurly', name: '마켓컬리', group: 'specialty', cats: ['food', 'goods', 'beauty'], frame: true, url: 'https://www.kurly.com/search?sword={q}' },
     { id: 'oliveyoung', name: '올리브영', group: 'specialty', cats: ['beauty', 'goods'], frame: true, url: 'https://www.oliveyoung.co.kr/store/search/getSearchMain.do?query={q}' },
-    { id: 'daiso', name: '다이소몰', group: 'specialty', cats: ['goods', 'furniture', 'beauty'], frame: true, url: 'https://www.daisomall.co.kr/ssn/search/Search?searchTerm={q}' },
+    // 다이소몰: 예전 주소(/ssn/search/Search)는 검색 화면이 아니라 데이터(JSON)였다. 아래는 사이트에서 직접 검색해 얻은 주소.
+    // 휴대폰 주소는 사이트가 검색엔진에 알려 주는 공식 검색 주소(SearchAction). "Mobile" 표시가 있어야 휴대폰으로 본다
+    // — 갤럭시탭(Mobile 없음)은 PC 주소. 휴대폰에 PC 주소를 주면 새 탭에서도 404 다 (2026-09-30 실측)
+    { id: 'daiso', name: '다이소몰', group: 'specialty', cats: ['goods', 'furniture', 'beauty'], frame: true,
+      url: 'https://www.daisomall.co.kr/ds/dst/SCR_DST_0015?searchTerm={q}',
+      mobileUrl: 'https://m.daisomall.co.kr/main/ds/dsl/SCR_DSL_0015?searchTerm={q}',
+      mobileWhen: 'iPhone|iPod|iPad|Mobile' },
     { id: 'ohou', name: '오늘의집', group: 'specialty', cats: ['furniture', 'goods', 'digital'], frame: false, url: 'https://ohou.se/search/index?query={q}', blocked: true },
     { id: 'ikea', name: '이케아', group: 'specialty', cats: ['furniture', 'goods'], frame: false, url: 'https://www.ikea.com/kr/ko/search/?q={q}' },
     { id: 'musinsa', name: '무신사', group: 'specialty', cats: ['fashion', 'beauty'], frame: true, url: 'https://www.musinsa.com/search/goods?keyword={q}' },
@@ -55,9 +69,14 @@
     { id: 'wconcept', name: 'W컨셉', group: 'specialty', cats: ['fashion', 'beauty'], frame: true, url: 'https://display.wconcept.co.kr/search?keyword={q}' },
   ];
 
-  function searchUrl(mall, query) {
-    return mall.url.replace('{q}', encodeURIComponent(String(query).trim()));
+  // 이 기기(User-Agent)에 맞는 주소 틀. ua 를 안 주면 PC 주소.
+  function urlFor(mall, ua) {
+    return mall.mobileUrl && ua && new RegExp(mall.mobileWhen, 'i').test(ua) ? mall.mobileUrl : mall.url;
   }
 
-  global.Malls = { categories, groups, malls, searchUrl };
+  function searchUrl(mall, query, ua) {
+    return urlFor(mall, ua).replace('{q}', encodeURIComponent(String(query).trim()));
+  }
+
+  global.Malls = { categories, groups, malls, urlFor, searchUrl };
 })(window);

@@ -5,6 +5,8 @@
   'use strict';
 
   const M = window.Malls;
+  // 쇼핑몰 주소는 기기에 맞춰 고른다(휴대폰 전용 주소가 있는 곳). data/malls.js 의 mobileUrl·mobileWhen 참고
+  const UA = navigator.userAgent;
   const OFF_KEY = 'mallsearch.off.v1';      // 체크 해제한 쇼핑몰 id
   const RECENT_KEY = 'mallsearch.recent.v1';
   const EXTERNAL_KEY = 'mallsearch.includeExternal.v1';
@@ -94,7 +96,7 @@
     <div class="grid">${items.map(m => {
       const on = !state.off.has(m.id);
       const link = q
-        ? `href="${esc(M.searchUrl(m, q))}" target="_blank" rel="noopener noreferrer"`
+        ? `href="${esc(M.searchUrl(m, q, UA))}" target="_blank" rel="noopener noreferrer"`
         : 'aria-disabled="true"';
       const ext = external(m) ? ' <small class="ext" title="이 쇼핑몰은 새 창으로 열립니다">새 창</small>' : '';
       return `
@@ -217,7 +219,7 @@
       f.addEventListener('load', () => { $('frame-loading').hidden = true; });
       // 쇼핑몰은 광고까지 다 받아야 load 가 와서 늦다. 안내는 잠깐만 보여 준다.
       loadTimer = setTimeout(() => { $('frame-loading').hidden = true; }, 3000);
-      f.src = M.searchUrl(mall, state.query);
+      f.src = M.searchUrl(mall, state.query, UA);
     } else {
       f.hidden = true;
     }
@@ -285,7 +287,7 @@
   //   창을 다시 이동시키지 못하게 막는다 (AGENTS.md 3항 "새 창과 opener").
   function openExternal(mall) {
     if (!state.query || !mall) return false;
-    const url = M.searchUrl(mall, state.query);
+    const url = M.searchUrl(mall, state.query, UA);
     if (opensInTabs()) {
       const w = window.open(url, '_blank');
       if (!w) return popupBlocked();
@@ -315,7 +317,7 @@
     const list = targets();
     let blocked = 0;
     list.forEach(m => {
-      const w = window.open(M.searchUrl(m, state.query), '_blank');
+      const w = window.open(M.searchUrl(m, state.query, UA), '_blank');
       if (w) { try { w.opener = null; } catch (e) { /* 무시 */ } } else blocked++;
     });
     remember(state.query);

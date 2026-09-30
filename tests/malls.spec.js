@@ -56,3 +56,53 @@ test('페이지 안 표시 여부(frame): 확인된 곳이 넘겨보기의 대�
   // 2026-09-30 실측: X-Frame-Options / frame-ancestors 로 거부 (AGENTS.md 3항)
   expect(r.external).toEqual(expect.arrayContaining(['naver', 'enuri', 'coupang', 'gmarket', 'auction', 'ohou', 'ikea']));
 });
+
+test.describe('기기별 주소 (휴대폰 전용 주소가 있는 쇼핑몰)', () => {
+  // 2026-09-30 실측: 쇼핑몰이 PC 주소를 받았을 때 휴대폰 주소로 넘기는 조건 (AGENTS.md 3항 "기기별 주소")
+  const UA = {
+    windows: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+    ipadDefault: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15',
+    ipadMobileSite: 'Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+    iphone: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+    galaxyPhone: 'Mozilla/5.0 (Linux; Android 14; SM-S928N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36',
+    galaxyTab: 'Mozilla/5.0 (Linux; Android 14; SM-X910N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+  };
+  const expected = {        // [롯데ON, 다이소몰]  PC=PC 주소, M=휴대폰 주소
+    windows: ['PC', 'PC'],
+    ipadDefault: ['PC', 'PC'],
+    ipadMobileSite: ['M', 'M'],
+    iphone: ['M', 'M'],
+    galaxyPhone: ['M', 'M'],
+    galaxyTab: ['M', 'PC'],   // 롯데ON 은 안드로이드면 태블릿도 휴대폰으로 본다. 다이소몰은 Mobile 표시가 있어야 휴대폰
+  };
+
+  for (const [name, ua] of Object.entries(UA)) {
+    test(`${name}: 롯데ON ${expected[name][0]}, 다이소몰 ${expected[name][1]} 주소`, async ({ page }) => {
+      const got = await page.evaluate(u => ['lotteon', 'daiso'].map(id => {
+        const m = window.Malls.malls.find(x => x.id === id);
+        return window.Malls.urlFor(m, u) === m.mobileUrl ? 'M' : 'PC';
+      }), ua);
+      expect(got).toEqual(expected[name]);
+    });
+  }
+
+  test('휴대폰 주소도 https 이고 {q} 자리가 1개다. 다른 쇼핑몰은 기기와 상관없이 같은 주소다', async ({ page }) => {
+    const r = await page.evaluate(ua => {
+      const out = [];
+      window.Malls.malls.forEach(m => {
+        if (m.mobileUrl) {
+          if (!m.mobileUrl.startsWith('https://')) out.push(`${m.id}: 휴대폰 주소 https 아님`);
+          if (m.mobileUrl.split('{q}').length !== 2) out.push(`${m.id}: 휴대폰 주소 {q} 자리`);
+          if (!m.mobileWhen) out.push(`${m.id}: mobileWhen 없음`);
+        } else if (window.Malls.urlFor(m, ua) !== m.url) out.push(`${m.id}: 휴대폰 주소가 없는데 주소가 바뀜`);
+      });
+      return out;
+    }, UA.iphone);
+    expect(r).toEqual([]);
+  });
+
+  test('다이소몰 주소는 예전의 데이터(JSON) 주소가 아니다', async ({ page }) => {
+    const urls = await page.evaluate(() => { const m = window.Malls.malls.find(x => x.id === 'daiso'); return [m.url, m.mobileUrl]; });
+    for (const u of urls) expect(u).not.toContain('/ssn/search/Search');
+  });
+});

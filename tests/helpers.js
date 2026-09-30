@@ -54,7 +54,9 @@ async function openApp(page, query) {
 
 const opened = page => page.evaluate(() => window.__opened);
 const nav = page => page.evaluate(() => window.__nav);
-const malls = page => page.evaluate(() => window.Malls.malls);
+// 쇼핑몰 목록. url 은 이 페이지 기기(User-Agent)에 맞게 고른 주소 틀로 바꿔 돌려준다 (휴대폰 전용 주소가 있는 곳)
+const malls = page => page.evaluate(() =>
+  window.Malls.malls.map(m => Object.assign({}, m, { url: window.Malls.urlFor(m, navigator.userAgent) })));
 const urlOf = (mall, q) => mall.url.replace('{q}', encodeURIComponent(q));
 const frameSrc = page => page.locator('#frame').getAttribute('src');
 // 기본 넘겨보기 순서: 새 창 전용(frame: false)은 뺀다

@@ -1,6 +1,6 @@
 // 앱(PWA) 설치 — 홈 화면에 추가하면 주소창·툴바 없이 뜨는지, 앱 모드 넘겨보기가 동작하는지
 const { test, expect } = require('@playwright/test');
-const { trackErrors, stubOpen, opened, malls, urlOf } = require('./helpers');
+const { trackErrors, stubOpen, stubMalls, opened, malls, urlOf, inPage } = require('./helpers');
 
 test('manifest: 단독 실행(standalone), 시작 주소·범위, 아이콘 3종(일반 192·512, 마스커블)', async ({ request }) => {
   const res = await request.get('/manifest.webmanifest');
@@ -77,48 +77,40 @@ test.describe('앱 모드 (홈 화면에서 실행)', () => {
     await expect(page.locator('#open-tabs')).toBeHidden();
   });
 
-  test('넘겨보기는 한 곳씩 앱 위 브라우저로 열고, 다음을 누르면 다음 쇼핑몰을 연다', async ({ page }) => {
+  test('앱에서도 넘겨보기는 앱 밖으로 나가지 않고 앱 안 패널에 띄운다', async ({ page }) => {
+    await stubMalls(page);
+    await stubOpen(page);
+    await openAppMode(page, '빼빼로');
+    const list = inPage(await malls(page));
+    await page.click('#view-start');
+    await expect(page.locator('#panel')).toBeVisible();
+    await expect(page.locator('#frame')).toHaveAttribute('src', urlOf(list[0], '빼빼로'));
+    await page.click('#next');
+    await expect(page.locator('#frame')).toHaveAttribute('src', urlOf(list[1], '빼빼로'));
+    await expect(page.locator('#viewer-pos')).toHaveText(`2 / ${list.length}`);
+    expect(await opened(page)).toEqual([]);
+  });
+
+  test('앱에서 새 창 전용 쇼핑몰과 ↗ 새 창은 앱 위 브라우저(_blank)로 연다 — 옆 창(popup)을 쓰지 않는다', async ({ page }) => {
+    await stubMalls(page);
     await stubOpen(page);
     await openAppMode(page, '빼빼로');
     const all = await malls(page);
+    await page.click('.mall-link[data-link="naver"]');
     await page.click('#view-start');
-    await expect(page.locator('#viewer-pos')).toHaveText(`1 / ${all.length}`);
-    await expect(page.locator('#viewer-close')).toHaveText('넘겨보기 끝내기');
-    await expect(page.locator('#viewer-tip')).toContainText('닫기(✕)로 돌아와');
-    await page.click('#next');
-    await page.click('#next');
-    await page.click('#prev');
-
+    await page.click('#open-external');
     const calls = await opened(page);
-    expect(calls.map(c => c.url)).toEqual([0, 1, 2, 1].map(i => urlOf(all[i], '빼빼로')));
-    expect(calls.every(c => c.name === '_blank' && !c.features)).toBe(true); // 옆 창(popup) 아님
-    await expect(page.locator('#viewer-pos')).toHaveText(`2 / ${all.length}`);
-    // 데스크톱처럼 목록을 왼쪽 1/3 로 줄이지 않는다 (결과가 앱 위에 겹쳐 뜨므로)
-    expect(await page.locator('.wrap').evaluate(el => getComputedStyle(el).maxWidth)).toBe('960px');
+    expect(calls.map(c => c.url)).toEqual([urlOf(all.find(m => m.id === 'naver'), '빼빼로'), urlOf(inPage(all)[0], '빼빼로')]);
+    expect(calls.every(c => c.name === '_blank' && !c.features)).toBe(true);
   });
 
-  test('앱 모드에서는 결과 창을 감시하지 않으므로 넘겨보기 막대가 저절로 사라지지 않는다', async ({ page }) => {
-    await stubOpen(page);
+  test('앱에서 뒤로 가기(안드로이드 뒤로 제스처)는 앱을 나가지 않고 패널을 닫는다', async ({ page }) => {
+    await stubMalls(page);
     await openAppMode(page, '생수');
     await page.click('#view-start');
-    await page.waitForTimeout(1500);
-    await expect(page.locator('#viewer')).toBeVisible();
-    await page.click('#viewer-close');
-    await expect(page.locator('#viewer')).toBeHidden();
-  });
-
-  test('쇼핑몰 이름을 누르면 그곳이 열리고, 다음은 그 다음 쇼핑몰부터 이어진다', async ({ page }) => {
-    await stubOpen(page);
-    await page.context().route(/^https:\/\//, r => r.abort()); // 실제 쇼핑몰에는 접속하지 않는다
-    await openAppMode(page, '틴트');
-    const all = await malls(page);
-    const i = all.findIndex(m => m.id === 'oliveyoung');
-    const popup = page.waitForEvent('popup');
-    await page.click('.mall-link[data-link="oliveyoung"]');   // 링크는 브라우저 기본 동작으로 열린다
-    await (await popup).close();
-    await expect(page.locator('#viewer-name')).toHaveText('올리브영');
-    await page.click('#next');
-    expect((await opened(page)).map(c => c.url)).toEqual([urlOf(all[i + 1], '틴트')]);
+    await page.goBack();
+    await expect(page.locator('#panel')).toBeHidden();
+    expect(page.url()).toContain('source=pwa');
   });
 
   test('앱 모드에서도 주소가 ?source=pwa 를 유지해서 검색 후에도 앱 모드가 풀리지 않는다', async ({ page }) => {

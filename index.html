@@ -83,27 +83,73 @@
   #open-tabs { font: inherit; font-size: 13px; border: 0; background: none; color: var(--muted); text-decoration: underline; cursor: pointer; padding: 2px; }
   #open-tabs:disabled { opacity: .5; cursor: not-allowed; text-decoration: none; }
 
-  .viewer {
-    position: sticky; top: 0; z-index: 5; margin: 14px 0 0; padding: 12px 14px;
-    background: var(--panel); border: 2px solid var(--accent); border-radius: 12px; box-shadow: var(--shadow);
-    display: grid; gap: 8px;
-  }
-  .viewer .pos { font-variant-numeric: tabular-nums; color: var(--muted); }
-  .viewer-btns { display: flex; flex-wrap: wrap; gap: 6px; }
-  .viewer-btns button {
-    font: inherit; font-weight: 700; padding: 7px 14px; border-radius: 10px; cursor: pointer;
-    border: 0; background: var(--accent); color: #fff;
-  }
-  .viewer-btns button:disabled { opacity: .4; cursor: not-allowed; }
-  .viewer-btns .ghost { background: none; border: 1px solid var(--line); color: var(--muted); font-weight: 400; }
-  .viewer-tip { font-size: 12px; color: var(--muted); }
   .mall.current { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .mall-link .ext {
+    font-size: 11px; font-weight: 400; color: var(--muted); border: 1px solid var(--line);
+    border-radius: 4px; padding: 0 4px; margin-left: 4px; vertical-align: 2px; white-space: nowrap;
+  }
 
-  /* 넘겨보기 중: 결과 창이 화면 오른쪽을 차지하므로 목록을 왼쪽에 붙인다 */
-  /* (앱 모드에서는 결과가 앱 위에 겹쳐 뜨므로 적용하지 않는다) */
-  html:not(.app-mode) body.viewing .wrap { max-width: none; width: 34vw; min-width: 300px; margin: 0; }
-  html:not(.app-mode) body.viewing .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
-  html:not(.app-mode) body.viewing header.top p, html:not(.app-mode) body.viewing footer { display: none; }
+  /* ── 넘겨보기 패널: 쇼핑몰 검색 결과를 이 페이지 안(iframe)에 띄운다 ──
+     좁은 화면(휴대폰·앱)은 전체 화면으로 덮고, 넓은 화면은 오른쪽에 붙는다(아래 min-width 900px). */
+  .panel {
+    position: fixed; z-index: 20; top: 0; right: 0; bottom: 0; left: 0;
+    display: flex; flex-direction: column; background: var(--bg);
+  }
+  body.viewing { overflow: hidden; }
+  .viewer {
+    padding: calc(8px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
+    background: var(--panel); border-bottom: 1px solid var(--line); display: grid; gap: 6px;
+  }
+  .viewer-bar { display: flex; align-items: center; gap: 8px; }
+  .viewer-bar .grow { flex: 1; }
+  .viewer-now { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+  .viewer-now strong { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .viewer-now .pos { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .viewer-bar button {
+    font: inherit; font-weight: 700; padding: 7px 12px; border-radius: 10px; border: 0;
+    background: var(--accent); color: #fff; cursor: pointer; white-space: nowrap;
+  }
+  .viewer-bar button:disabled { opacity: .35; cursor: not-allowed; }
+  .viewer-bar .ghost { background: none; border: 1px solid var(--line); color: var(--text); font-weight: 400; }
+  .viewer-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; font-size: 12px; color: var(--muted); }
+  .viewer-sub label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .panel-body { position: relative; flex: 1; min-height: 0; }
+  .frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; }
+  .frame-loading {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%); padding: 6px 14px;
+    border-radius: 999px; background: var(--panel); box-shadow: var(--shadow); font-size: 13px; color: var(--muted);
+    pointer-events: none;
+  }
+  .frame-note {
+    position: absolute; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom));
+    padding: 8px 12px; border-radius: 10px; background: var(--warn-bg); border: 1px solid var(--warn-line); font-size: 13px;
+  }
+  .frame-blocked {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; padding: 24px; text-align: center;
+  }
+  .frame-blocked p { margin: 0; }
+  .frame-blocked .muted { font-size: 13px; color: var(--muted); }
+  #blocked-open {
+    font: inherit; font-size: 16px; font-weight: 700; padding: 12px 22px; border: 0; border-radius: 12px;
+    background: var(--accent); color: #fff; cursor: pointer;
+  }
+  #panel-note { position: absolute; top: 12px; left: 12px; right: 12px; margin: 0; }
+
+  @media (min-width: 900px) {
+    :root { --side: clamp(320px, 30vw, 420px); }
+    /* 목록은 왼쪽 기둥으로 줄이고 따로 스크롤한다. 결과 패널은 나머지를 채운다. */
+    body.viewing .wrap {
+      position: fixed; top: 0; left: 0; bottom: 0; width: var(--side); max-width: none; margin: 0;
+      overflow-y: auto; border-right: 1px solid var(--line);
+    }
+    body.viewing .panel { left: var(--side); }
+    body.viewing .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+    body.viewing header.top p, body.viewing footer { display: none; }
+  }
+  @media (max-width: 899px) {
+    .viewer-tip { display: none; }
+  }
 
   .recent { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 10px 0 0; font-size: 13px; color: var(--muted); }
   .recent button {
@@ -160,7 +206,7 @@
 <div class="wrap">
   <header class="top">
     <h1>쇼핑몰 한번에 검색</h1>
-    <p>검색어 하나로 가격비교·오픈마켓·전문몰의 검색 결과를 바로 엽니다.</p>
+    <p>검색어 하나로 가격비교·오픈마켓·전문몰의 검색 결과를 차례로 넘겨 봅니다.</p>
   </header>
 
   <div id="install-bar" class="install" role="note" hidden>
@@ -171,23 +217,13 @@
 
   <form id="search-form" role="search">
     <input id="q" type="search" autocomplete="off" placeholder="상품명을 입력하세요 (예: 빼빼로)" aria-label="검색어">
-    <button type="submit" id="view-start">한 창에서 넘겨보기</button>
+    <button type="submit" id="view-start">넘겨보기</button>
   </form>
   <div class="sub-actions">
     <button type="button" id="open-tabs">모두 새 탭으로 열기</button>
   </div>
   <div id="recent" class="recent" hidden></div>
   <div id="notice" class="note" role="status" hidden></div>
-
-  <div id="viewer" class="viewer" role="region" aria-label="넘겨보기" hidden>
-    <div class="viewer-now"><span id="viewer-pos" class="pos"></span> <strong id="viewer-name"></strong> 표시 중</div>
-    <div class="viewer-btns">
-      <button type="button" id="prev">◀ 이전</button>
-      <button type="button" id="next">다음 ▶</button>
-      <button type="button" id="viewer-close" class="ghost">결과 창 닫기</button>
-    </div>
-    <div class="viewer-tip" id="viewer-tip"></div>
-  </div>
 
   <div class="bar">
     <nav id="categories" class="chips" aria-label="카테고리"></nav>
@@ -200,13 +236,46 @@
   <main id="malls"></main>
 
   <footer>
-    <strong>한 창에서 넘겨보기</strong>(Enter)는 결과 창을 하나만 띄우고, 체크한 쇼핑몰을 ◀ ▶ 로 차례로 보여 줍니다.
-    결과 창이 열려 있을 때 쇼핑몰 이름을 누르면 그 창에서 보이고, Ctrl+클릭하면 새 탭으로 열립니다.<br>
+    <strong>넘겨보기</strong>(Enter)는 체크한 쇼핑몰의 검색 결과를 이 페이지 안에서 ◀ ▶ 로 차례로 보여 줍니다.
+    쇼핑몰 이름을 누르면 그곳으로 바로 가고, Ctrl+클릭하면 새 탭으로 열립니다.<br>
+    <strong>새 창</strong> 표시가 붙은 곳(네이버쇼핑 등)은 쇼핑몰이 다른 사이트 안에 표시되는 것을 막아 두어서 새 창으로 열립니다.
+    로그인·장바구니도 새 창(↗)에서 쓰는 것이 확실합니다.<br>
     <strong>모두 새 탭으로 열기</strong>는 체크한 곳을 한꺼번에 여는데, 브라우저가 팝업을 막으면 첫 탭만 열립니다.
     이때 주소창 오른쪽의 팝업 차단 아이콘에서 "항상 허용"을 고르고 다시 누르세요.<br>
     이 페이지는 가격을 가져오거나 저장하지 않습니다. 각 쇼핑몰 검색 주소로 연결만 합니다.
   </footer>
 </div>
+
+<section id="panel" class="panel" aria-label="쇼핑몰 검색 결과" hidden>
+  <div id="viewer" class="viewer">
+    <div class="viewer-bar">
+      <button type="button" id="prev" aria-label="이전 쇼핑몰">◀</button>
+      <div class="viewer-now"><strong id="viewer-name"></strong><span id="viewer-pos" class="pos"></span></div>
+      <button type="button" id="next">다음 ▶</button>
+      <span class="grow"></span>
+      <button type="button" id="open-external" class="ghost" title="이 쇼핑몰을 새 창으로 열기">↗ 새 창</button>
+      <button type="button" id="viewer-close" class="ghost" aria-label="넘겨보기 닫기">✕</button>
+    </div>
+    <div class="viewer-sub">
+      <label id="include-external-row"><input type="checkbox" id="include-external"> <span id="include-external-label"></span></label>
+      <span class="viewer-tip" id="viewer-tip">← → 키로 넘기고 Esc 로 닫습니다.</span>
+    </div>
+  </div>
+  <div class="panel-body">
+    <iframe id="frame" class="frame" title="쇼핑몰 검색 결과" hidden></iframe>
+    <div id="frame-loading" class="frame-loading" hidden>불러오는 중…</div>
+    <div id="frame-unverified" class="frame-note" hidden>
+      <strong id="unverified-name"></strong> 검색 결과가 이 화면 안에 보이는지 아직 확인하지 못했습니다.
+      "연결을 거부했습니다"가 보이면 위의 ↗ 새 창을 누르세요.
+    </div>
+    <div id="frame-blocked" class="frame-blocked" hidden>
+      <p><strong id="blocked-name"></strong> 검색 결과는 이 화면 안에 표시할 수 없습니다.<br>쇼핑몰이 다른 사이트 안에 표시되는 것을 막아 두었습니다.</p>
+      <button type="button" id="blocked-open">새 창으로 보기 ↗</button>
+      <p class="muted">다음 ▶ 을 누르면 다음 쇼핑몰로 넘어갑니다.</p>
+    </div>
+    <div id="panel-note" class="note warn" role="status" hidden></div>
+  </div>
+</section>
 
 <script src="data/malls.js"></script>
 <script src="app.js"></script>

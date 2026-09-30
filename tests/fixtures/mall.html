@@ -1,0 +1,16 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>테스트용 가짜 쇼핑몰</title>
+<!-- tests/viewer-real.spec.js 전용 (배포하지 않는다).
+     넘겨보기 패널의 iframe 안에서 "탈출" 버튼을 누르면 바깥 페이지(top)를 다른 주소로 옮기려 한다.
+     패널 iframe 의 sandbox 가 이것을 막아야 한다. -->
+<body>
+<p>가짜 쇼핑몰</p>
+<button id="escape" type="button">탈출</button>
+<script>
+  document.getElementById('escape').addEventListener('click', function () {
+    try { top.location.href = location.href.split('?')[0] + '?escaped=1'; } catch (e) { /* 막히면 예외 */ }
+    document.body.dataset.tried = '1';
+  });
+</script>
+</body>

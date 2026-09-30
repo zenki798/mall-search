@@ -2,24 +2,30 @@
 const { test, expect } = require('@playwright/test');
 const path = require('path');
 const { pathToFileURL } = require('url');
-const { trackErrors, stubOpen, opened, nav, urlOf } = require('./helpers');
+const { trackErrors, stubOpen, stubMalls, opened, urlOf, inPage } = require('./helpers');
 
 const FILE_URL = pathToFileURL(path.join(__dirname, '..', 'index.html')).href;
 
-test('file:// 로 열어도 링크 만들기·체크·넘겨보기·새 탭 열기가 동작한다', async ({ page }) => {
+test('file:// 로 열어도 링크 만들기·체크·넘겨보기(패널)·새 탭 열기가 동작한다', async ({ page }) => {
   const errors = trackErrors(page);
+  await stubMalls(page);
   await stubOpen(page);
   await page.goto(FILE_URL);
   await page.waitForFunction(() => window.__ready === true);
   const all = await page.evaluate(() => window.Malls.malls);
+  const list = inPage(all);
 
   await page.fill('#q', '빼빼로');
   await expect(page.locator('.mall-link[data-link="11st"]'))
     .toHaveAttribute('href', 'https://search.11st.co.kr/pc/total-search?kwd=' + encodeURIComponent('빼빼로'));
-  await page.uncheck('[data-pick="naver"]');
+  await page.uncheck(`[data-pick="${list[0].id}"]`);
   await page.press('#q', 'Enter');
+  await expect(page.locator('#panel')).toBeVisible();
+  await expect(page.locator('#frame')).toHaveAttribute('src', urlOf(list[1], '빼빼로'));
   await page.click('#next');
-  expect(await nav(page)).toEqual([urlOf(all[1], '빼빼로'), urlOf(all[2], '빼빼로')]);
+  await expect(page.locator('#frame')).toHaveAttribute('src', urlOf(list[2], '빼빼로'));
+  await page.click('#viewer-close');
+  await expect(page.locator('#panel')).toBeHidden();
 
   await page.click('#open-tabs');
   expect((await opened(page)).filter(c => c.name === '_blank')).toHaveLength(all.length - 1);

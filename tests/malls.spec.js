@@ -18,6 +18,7 @@ test('쇼핑몰 목록: id 중복 없음, https 주소, {q} 자리 1개, 그룹�
       if (m.url.split('{q}').length !== 2) out.push(`${m.id}: {q} 자리가 1개가 아님`);
       if (!g.has(m.group)) out.push(`${m.id}: 없는 그룹 ${m.group}`);
       if (!m.cats.length) out.push(`${m.id}: 카테고리 없음`);
+      if (!(m.frame === true || m.frame === false || m.frame === undefined)) out.push(`${m.id}: frame 은 true/false/없음 중 하나`);
       m.cats.forEach(k => { if (!c.has(k)) out.push(`${m.id}: 없는 카테고리 ${k}`); });
     });
     categories.forEach(k => { if (!malls.some(m => m.cats.includes(k.key))) out.push(`카테고리 ${k.key} 에 쇼핑몰 없음`); });
@@ -41,4 +42,17 @@ test('검색어는 인코딩되고 앞뒤 공백은 잘린다 (한글·공백·&
   });
   expect(r[0]).toBe('https://example.com/s?x=1&q=%EB%B9%BC%EB%B9%BC%EB%A1%9C');
   expect(r[1]).toBe('https://example.com/s?x=1&q=a%26b%20%231%20%2B%20100%25');
+});
+
+test('페이지 안 표시 여부(frame): 확인된 곳이 넘겨보기의 대부분을 차지하고, 거부하는 곳은 새 창으로 분류돼 있다', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    const ms = window.Malls.malls;
+    return {
+      inPage: ms.filter(m => m.frame === true).length,
+      external: ms.filter(m => m.frame === false).map(m => m.id),
+    };
+  });
+  expect(r.inPage).toBeGreaterThanOrEqual(10);
+  // 2026-09-30 실측: X-Frame-Options / frame-ancestors 로 거부 (AGENTS.md 3항)
+  expect(r.external).toEqual(expect.arrayContaining(['naver', 'enuri', 'gmarket', 'auction', 'ohou', 'ikea']));
 });

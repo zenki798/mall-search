@@ -1,39 +1,58 @@
-// 가짜 창 없이 실제 브라우저 창으로 넘겨보기를 확인한다.
-// 결과 창은 쇼핑몰(다른 출처)로 넘어간 뒤에도 계속 이동시킬 수 있어야 한다.
-// opener 를 끊으면 크롬이 이 이동을 막는다 — 그 회귀를 잡는 테스트다 (AGENTS.md 3항 "결과 창과 opener").
-// 외부 쇼핑몰에 접속하지 않도록 주소를 127.0.0.1(페이지의 localhost 와 다른 출처)로 바꿔 쓴다.
+// 가짜 창·가짜 응답 없이 실제 브라우저 동작을 확인한다.
+// 외부 쇼핑몰에 접속하지 않도록 주소를 127.0.0.1(페이지의 localhost 와 다른 출처)의 테스트용 페이지로 바꿔 쓴다.
 const { test, expect } = require('@playwright/test');
 
-test('실제 창: 결과 창은 하나만 뜨고, 다른 출처로 넘어간 뒤에도 다음·이전으로 이동한다', async ({ page, context }) => {
+async function pointMallsToFixture(page) {
   await page.goto('/?q=' + encodeURIComponent('빼빼로'));
   await page.waitForFunction(() => window.__ready === true);
   await page.evaluate(() => {
-    const base = 'http://127.0.0.1:' + location.port + '/data/malls.js?m=';
+    const base = 'http://127.0.0.1:' + location.port + '/tests/fixtures/mall.html?m=';
     window.Malls.malls.forEach((m, i) => { m.url = base + i + '&q={q}'; });
   });
+}
+const fixtureFrame = page => page.frames().find(f => f.url().includes('/tests/fixtures/mall.html'));
 
-  const popupPromise = context.waitForEvent('page');
+test('실제 iframe: 다른 출처 페이지가 패널 안에 뜨고, 다음을 누르면 바뀌며, 쇼핑몰이 이 페이지를 빼앗지 못한다', async ({ page }) => {
+  await pointMallsToFixture(page);
+  const start = page.url();
+  const order = await page.evaluate(() => window.Malls.malls.map((m, i) => (m.frame === false ? -1 : i)).filter(i => i >= 0));
+
   await page.click('#view-start');
-  const popup = await popupPromise;
-  await popup.waitForURL(/m=0&q=/);
-
-  let extra = 0;
-  context.on('page', () => extra++);
-
+  await expect.poll(() => (fixtureFrame(page) || { url: () => '' }).url()).toContain(`m=${order[0]}&`);
   await page.click('#next');
-  await popup.waitForURL(/m=1&q=/);
-  await page.click('#next');
-  await popup.waitForURL(/m=2&q=/);
-  await page.click('#prev');
-  await popup.waitForURL(/m=1&q=/);
-  await page.click('.mall-link[data-link="oliveyoung"]');
-  const oy = await page.evaluate(() => window.Malls.malls.findIndex(m => m.id === 'oliveyoung'));
-  await popup.waitForURL(new RegExp(`m=${oy}&q=`));
+  await expect.poll(() => (fixtureFrame(page) || { url: () => '' }).url()).toContain(`m=${order[1]}&`);
+  expect(page.frames().filter(f => f.url().includes('/tests/fixtures/mall.html'))).toHaveLength(1);
 
-  expect(extra).toBe(0);                     // 새 창·새 탭이 더 뜨지 않았다
-  expect(popup.url()).toContain('q=' + encodeURIComponent('빼빼로'));
+  // 사용자가 iframe 안을 눌러(사용자 조작) 바깥 페이지를 옮기려 해도 sandbox 가 막는다.
+  const frame = fixtureFrame(page);
+  await frame.click('#escape');
+  await expect.poll(() => frame.evaluate(() => document.body.dataset.tried)).toBe('1');
+  await page.waitForTimeout(500);
+  expect(page.url()).toBe(start);
+  await expect(page.locator('#panel')).toBeVisible();
+});
 
-  await page.click('#viewer-close');
-  await expect.poll(() => popup.isClosed()).toBe(true);
-  await expect(page.locator('#viewer')).toBeHidden();
+test('실제 창: 새 창 전용 쇼핑몰 — PC 는 창 하나를 재사용하고 다른 출처로 넘어간 뒤에도 계속 이동, 휴대폰은 매번 새로 열고 연결을 끊는다', async ({ page, context }) => {
+  await pointMallsToFixture(page);
+  const ids = ['naver', 'enuri', 'ikea'];
+  const index = await page.evaluate(list => list.map(id => window.Malls.malls.findIndex(m => m.id === id)), ids);
+  const pages = [];
+  context.on('page', p => pages.push(p));
+
+  for (let k = 0; k < ids.length; k++) {
+    const i = index[k];
+    const before = pages.length;
+    await page.click(`.mall-link[data-link="${ids[k]}"]`);
+    if (page.viewportSize().width >= 900) {
+      // PC: opener 를 끊으면 크롬이 두 번째 이동부터 막는다 — 그 회귀를 잡는다 (AGENTS.md 3항 "새 창과 opener")
+      await expect.poll(() => pages.length).toBe(1);
+      await pages[0].waitForURL(new RegExp(`m=${i}&`));
+    } else {
+      await expect.poll(() => pages.length).toBe(before + 1);
+      const p = pages[pages.length - 1];
+      await p.waitForURL(new RegExp(`m=${i}&`));
+      expect(await p.evaluate(() => window.opener)).toBeNull();   // 열린 쇼핑몰이 이 페이지를 건드리지 못한다
+    }
+  }
+  expect(pages).toHaveLength(page.viewportSize().width >= 900 ? 1 : 3);
 });

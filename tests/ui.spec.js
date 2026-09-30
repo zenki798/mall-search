@@ -1,6 +1,8 @@
-// 화면 동작 — 검색 링크, 한 창에서 넘겨보기, 모두 새 탭으로, 체크 유지, 카테고리, 최근 검색
+// 화면 동작 — 검색 링크, 페이지 안에서 넘겨보기, 새 창, 모두 새 탭으로, 체크 유지, 카테고리, 최근 검색
 const { test, expect } = require('@playwright/test');
-const { trackErrors, stubOpen, openApp, opened, nav, malls, urlOf } = require('./helpers');
+const { trackErrors, stubOpen, stubMalls, openApp, opened, nav, malls, urlOf, frameSrc, inPage } = require('./helpers');
+
+const isWide = page => page.viewportSize().width >= 900;
 
 test('처음 열면 에러 없이 모든 쇼핑몰이 보이고, 검색어 전에는 링크·버튼이 비활성이다', async ({ page }) => {
   const errors = trackErrors(page);
@@ -10,7 +12,7 @@ test('처음 열면 에러 없이 모든 쇼핑몰이 보이고, 검색어 전�
   await expect(page.locator('.mall-link[href]')).toHaveCount(0);
   await expect(page.locator('#view-start')).toBeDisabled();
   await expect(page.locator('#open-tabs')).toBeDisabled();
-  await expect(page.locator('#viewer')).toBeHidden();
+  await expect(page.locator('#panel')).toBeHidden();
   await expect(page.locator('#recent')).toBeHidden();   // 기록이 없으면 "최근:" 줄도 없다
   await expect(page.locator('#notice')).toBeHidden();
   expect(errors).toEqual([]);
@@ -26,114 +28,218 @@ test('검색어를 입력하면 모든 쇼핑몰 링크가 그 검색어의 검�
     await expect(a).toHaveAttribute('target', '_blank');
     await expect(a).toHaveAttribute('rel', /noopener/);
   }
-  await expect(page.locator('#view-start')).toHaveText(`${all.length}곳 한 창에서 넘겨보기`);
+  await expect(page.locator('#view-start')).toHaveText(`${inPage(all).length}곳 넘겨보기`);
   expect(page.url()).toContain('q=' + encodeURIComponent('빼빼로'));
 });
 
-test.describe('한 창에서 넘겨보기', () => {
-  test('Enter 를 누르면 결과 창을 딱 하나 열고 첫 쇼핑몰을 보여 준다', async ({ page }) => {
+test('페이지 안 표시를 거부하는 쇼핑몰에는 "새 창" 표시가 붙는다', async ({ page }) => {
+  await openApp(page, '빼빼로');
+  for (const m of await malls(page)) {
+    await expect(page.locator(`.mall-link[data-link="${m.id}"] .ext`), m.name).toHaveCount(m.frame === false ? 1 : 0);
+  }
+});
+
+test.describe('페이지 안에서 넘겨보기', () => {
+  test.beforeEach(async ({ page }) => {
+    await stubMalls(page);
     await stubOpen(page);
+  });
+
+  test('Enter → 창을 열지 않고 이 페이지 안 패널에 첫 쇼핑몰(새 창 전용 제외)을 띄운다', async ({ page }) => {
     await openApp(page);
     await page.fill('#q', '빼빼로');
     await page.press('#q', 'Enter');
-    const all = await malls(page);
-
-    const calls = await opened(page);
-    expect(calls).toHaveLength(1);
-    expect(calls[0].name).toBe('mallsearch-viewer');
-    expect(calls[0].features).toContain('popup');
-    expect(await nav(page)).toEqual([urlOf(all[0], '빼빼로')]);
-
-    await expect(page.locator('#viewer')).toBeVisible();
-    await expect(page.locator('#viewer-pos')).toHaveText(`1 / ${all.length}`);
-    await expect(page.locator('#viewer-name')).toHaveText(all[0].name);
-    await expect(page.locator(`.mall[data-mall="${all[0].id}"]`)).toHaveClass(/current/);
-    await expect(page.locator('body')).toHaveClass(/viewing/);
+    const list = inPage(await malls(page));
+    await expect(page.locator('#panel')).toBeVisible();
+    await expect(page.locator('#frame')).toBeVisible();
+    await expect(page.locator('#frame')).toHaveAttribute('src', urlOf(list[0], '빼빼로'));
+    await expect(page.locator('#viewer-name')).toHaveText(list[0].name);
+    await expect(page.locator('#viewer-pos')).toHaveText(`1 / ${list.length}`);
+    await expect(page.locator(`.mall[data-mall="${list[0].id}"]`)).toHaveClass(/current/);
+    await expect(page.locator('#q')).not.toBeFocused();   // 바로 ← → 로 넘길 수 있게
+    expect(await opened(page)).toEqual([]);
   });
 
-  test('다음·이전은 같은 창의 주소만 바꾸고, 처음·끝에서는 버튼이 꺼진다', async ({ page }) => {
-    await stubOpen(page);
-    await openApp(page, '선크림');
-    await page.click('#categories [data-category="fashion"]'); // 쇼핑몰 수를 줄여 끝까지 가 본다
+  test('다음·이전은 패널 안의 쇼핑몰만 바꾸고, 처음·끝에서는 버튼이 꺼진다', async ({ page }) => {
+    await openApp(page, '맨투맨');
+    await page.click('#categories [data-category="fashion"]');   // 쇼핑몰 수를 줄여 끝까지 가 본다
+    const list = inPage((await malls(page)).filter(m => m.cats.includes('fashion')));
     await page.click('#view-start');
-    const list = (await malls(page)).filter(m => m.cats.includes('fashion'));
-
     await expect(page.locator('#prev')).toBeDisabled();
-    for (let i = 1; i < list.length; i++) await page.click('#next');
+    const seen = [await frameSrc(page)];
+    for (let i = 1; i < list.length; i++) {
+      await page.click('#next');
+      seen.push(await frameSrc(page));
+    }
     await expect(page.locator('#next')).toBeDisabled();
     await expect(page.locator('#viewer-pos')).toHaveText(`${list.length} / ${list.length}`);
+    expect(seen).toEqual(list.map(m => urlOf(m, '맨투맨')));
     await page.click('#prev');
-
-    expect(await opened(page)).toHaveLength(1);              // 창은 여전히 하나
-    const expected = list.map(m => urlOf(m, '선크림'));
-    expect(await nav(page)).toEqual(expected.concat(expected[list.length - 2]));
-    await expect(page.locator(`.mall[data-mall="${list[list.length - 2].id}"]`)).toHaveClass(/current/);
+    await expect(page.locator('#frame')).toHaveAttribute('src', urlOf(list[list.length - 2], '맨투맨'));
+    expect(await opened(page)).toEqual([]);
   });
 
-  test('← → 키로 넘기되, 검색창에 입력 중일 때는 커서 이동을 방해하지 않는다', async ({ page }) => {
-    await stubOpen(page);
+  test('쇼핑몰을 바꿔도 방문 기록이 쌓이지 않고, 뒤로 가기는 사이트를 떠나지 않고 패널만 닫는다', async ({ page }) => {
+    await openApp(page, '생수');
+    const before = await page.evaluate(() => history.length);
+    await page.click('#view-start');
+    const withPanel = await page.evaluate(() => history.length);
+    expect(withPanel).toBe(before + 1);
+    await page.click('#next');
+    await page.click('#next');
+    await expect(page.locator('#viewer-pos')).toHaveText(/^3 \//);
+    expect(await page.evaluate(() => history.length)).toBe(withPanel);
+    await page.goBack();
+    await expect(page.locator('#panel')).toBeHidden();
+    expect(page.url()).toContain('q=' + encodeURIComponent('생수'));
+    await expect(page.locator('#q')).toHaveValue('생수');
+  });
+
+  test('✕ 를 누르면 패널이 닫히고, 열 때 쌓았던 기록도 되돌린다', async ({ page }) => {
+    await openApp(page, '생수');
+    await page.click('#view-start');
+    expect(await page.evaluate(() => history.state && history.state.mallViewer)).toBe(true);
+    await page.click('#viewer-close');
+    await expect(page.locator('#panel')).toBeHidden();
+    await expect(page.locator('body')).not.toHaveClass(/viewing/);
+    await expect.poll(() => page.evaluate(() => !!(history.state && history.state.mallViewer))).toBe(false);
+    await page.click('#view-start');                         // 다시 열 수 있다
+    await expect(page.locator('#panel')).toBeVisible();
+  });
+
+  test('← → 키로 넘기고 Esc 로 닫는다. 검색창에 입력 중일 때는 방해하지 않는다', async ({ page }) => {
     await openApp(page, '생수');
     await page.press('#q', 'Enter');
-    const all = await malls(page);
-
-    await page.press('#q', 'ArrowRight');                     // 검색창 포커스 → 넘기지 않음
-    expect(await nav(page)).toHaveLength(1);
-
-    await page.locator('#q').blur();
+    const list = inPage(await malls(page));
+    await page.evaluate(() => document.getElementById('q').focus());
+    await page.keyboard.press('ArrowRight');                  // 검색창 포커스 → 넘기지 않음
+    await expect(page.locator('#frame')).toHaveAttribute('src', urlOf(list[0], '생수'));
+    await page.evaluate(() => document.getElementById('q').blur());
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowLeft');
-    expect(await nav(page)).toEqual([0, 1, 2, 1].map(i => urlOf(all[i], '생수')));
+    await expect(page.locator('#frame')).toHaveAttribute('src', urlOf(list[1], '생수'));
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#panel')).toBeHidden();
   });
 
   test('체크를 푼 쇼핑몰은 건너뛴다', async ({ page }) => {
-    await stubOpen(page);
     await openApp(page, '의자');
-    const all = await malls(page);
-    await page.uncheck(`[data-pick="${all[1].id}"]`);
+    const list = inPage(await malls(page));
+    await page.uncheck(`[data-pick="${list[1].id}"]`);
     await page.click('#view-start');
     await page.click('#next');
-    expect(await nav(page)).toEqual([urlOf(all[0], '의자'), urlOf(all[2], '의자')]);
+    await expect(page.locator('#frame')).toHaveAttribute('src', urlOf(list[2], '의자'));
   });
 
-  test('결과 창이 열려 있으면 쇼핑몰 이름을 눌러도 새 탭 대신 그 창에서 보인다', async ({ page }) => {
-    await stubOpen(page);
+  test('쇼핑몰 이름을 누르면 그곳을 패널에서 보여 주고(창을 열지 않음), 다음은 그 다음부터 이어진다', async ({ page }) => {
     await openApp(page, '틴트');
+    const list = inPage(await malls(page));
+    const i = list.findIndex(m => m.id === 'musinsa');
+    await page.click('.mall-link[data-link="musinsa"]');
+    await expect(page.locator('#panel')).toBeVisible();
+    await expect(page.locator('#frame')).toHaveAttribute('src', urlOf(list[i], '틴트'));
+    await page.click('#next');
+    await expect(page.locator('#frame')).toHaveAttribute('src', urlOf(list[i + 1], '틴트'));
+    expect(await opened(page)).toEqual([]);
+  });
+
+  test('새 창 전용 쇼핑몰을 누르면 새 창으로 연다 — PC 는 창 하나를 재사용하고 앞으로 가져온다', async ({ page }) => {
+    await openApp(page, '빼빼로');
+    const all = await malls(page);
+    const naver = all.find(m => m.id === 'naver');
+    const enuri = all.find(m => m.id === 'enuri');
+    await page.click('.mall-link[data-link="naver"]');
+    await page.click('.mall-link[data-link="enuri"]');
+    await expect(page.locator('#panel')).toBeHidden();
+    const calls = await opened(page);
+    if (isWide(page)) {
+      expect(calls).toHaveLength(1);
+      expect(calls[0].name).toBe('mallsearch-viewer');
+      expect(calls[0].features).toContain('popup');
+      expect(await nav(page)).toEqual([urlOf(naver, '빼빼로'), urlOf(enuri, '빼빼로')]);
+      expect(await page.evaluate(() => window.__focused)).toBe(2);
+    } else {
+      // 휴대폰: 누를 때마다 새로 연다 (겹쳐 뜨고, 닫으면 돌아온다)
+      expect(calls.map(c => [c.url, c.name])).toEqual([[urlOf(naver, '빼빼로'), '_blank'], [urlOf(enuri, '빼빼로'), '_blank']]);
+    }
+  });
+
+  test('↗ 새 창 버튼은 지금 보는 쇼핑몰을 새 창으로 연다', async ({ page }) => {
+    await openApp(page, '빼빼로');
     await page.click('#view-start');
-    const oy = (await malls(page)).find(m => m.id === 'oliveyoung');
-    await page.click('.mall-link[data-link="oliveyoung"]');
+    const first = inPage(await malls(page))[0];
+    await page.click('#open-external');
+    const calls = await opened(page);
+    expect(calls).toHaveLength(1);
+    expect(isWide(page) ? (await nav(page))[0] : calls[0].url).toBe(urlOf(first, '빼빼로'));
+    await expect(page.locator('#panel')).toBeVisible();      // 패널은 그대로
+  });
+
+  test('"새 창 전용도 포함"을 켜면 순서에 들어가고, 그 차례에는 저절로 창을 띄우지 않고 버튼을 보여 준다 (설정 유지)', async ({ page }) => {
+    await openApp(page, '빼빼로');
+    await page.click('#view-start');
+    const all = await malls(page);
+    const extCount = all.filter(m => m.frame === false).length;
+    await expect(page.locator('#include-external-label')).toContainText(`새 창 전용 ${extCount}곳`);
+    await page.check('#include-external');
+    await expect(page.locator('#viewer-pos')).toHaveText(`2 / ${all.length}`);   // 다나와는 전체에서 2번째
+    await page.click('#prev');                                                  // → 네이버쇼핑 (새 창 전용)
+    await expect(page.locator('#viewer-name')).toHaveText('네이버쇼핑');
+    await expect(page.locator('#frame-blocked')).toBeVisible();
+    await expect(page.locator('#frame')).toBeHidden();
+    expect(await opened(page)).toEqual([]);
+    await page.click('#blocked-open');
     expect(await opened(page)).toHaveLength(1);
-    expect((await nav(page)).at(-1)).toBe(urlOf(oy, '틴트'));
-    await expect(page.locator('#viewer-name')).toHaveText('올리브영');
+
+    await page.reload();
+    await page.waitForFunction(() => window.__ready === true);
+    await expect(page.locator('#view-start')).toHaveText(`${all.length}곳 넘겨보기`);
   });
 
-  test('결과 창 닫기를 누르면 막대가 사라지고, 다시 Enter 하면 새 창을 연다', async ({ page }) => {
-    await stubOpen(page);
-    await openApp(page, '세제');
+  test('"불러오는 중" 안내는 쇼핑몰이 뜨면 사라진다', async ({ page }) => {
+    await openApp(page, '빼빼로');
     await page.click('#view-start');
-    await page.click('#viewer-close');
-    expect(await page.evaluate(() => window.__windows[0].closed)).toBe(true);
-    await expect(page.locator('#viewer')).toBeHidden();
-    await expect(page.locator('body')).not.toHaveClass(/viewing/);
-    await page.press('#q', 'Enter');
-    expect(await opened(page)).toHaveLength(2);
+    await expect(page.locator('#frame-loading')).toBeHidden({ timeout: 4000 });
   });
 
-  test('사용자가 결과 창을 직접 닫으면 넘겨보기 막대도 곧 사라진다', async ({ page }) => {
-    await stubOpen(page);
-    await openApp(page, '세제');
+  test('판별하지 못한 쇼핑몰(쿠팡)은 패널에 띄우되 "안 보이면 새 창" 안내를 붙인다', async ({ page }) => {
+    await openApp(page, '빼빼로');
     await page.click('#view-start');
-    await page.evaluate(() => { window.__windows[0].closed = true; });
-    await expect(page.locator('#viewer')).toBeHidden({ timeout: 3000 });
+    await page.click('#next');                                   // 다나와 다음 = 쿠팡
+    await expect(page.locator('#viewer-name')).toHaveText('쿠팡');
+    await expect(page.locator('#frame')).toBeVisible();
+    await expect(page.locator('#frame-unverified')).toBeVisible();
+    await expect(page.locator('#frame-unverified')).toContainText('↗ 새 창');
+    await page.click('#next');                                   // 11번가 (확인된 곳) → 안내 없음
+    await expect(page.locator('#frame-unverified')).toBeHidden();
   });
 
-  test('결과 창이 막히면 해결 방법을 안내한다', async ({ page }) => {
-    await stubOpen(page, 0);
-    await openApp(page, '세제');
+  test('패널의 iframe 은 쇼핑몰이 이 페이지를 다른 곳으로 이동시키지 못하게 제한(sandbox)된다', async ({ page }) => {
+    await openApp(page, '빼빼로');
     await page.click('#view-start');
-    await expect(page.locator('#notice')).toHaveClass(/warn/);
-    await expect(page.locator('#notice')).toContainText('결과 창을 막았습니다');
-    await expect(page.locator('#viewer')).toBeHidden();
+    const flags = (await page.locator('#frame').getAttribute('sandbox')).split(/\s+/);
+    expect(flags).not.toContain('allow-top-navigation');
+    expect(flags).not.toContain('allow-top-navigation-by-user-activation');
+    expect(flags).toEqual(expect.arrayContaining(['allow-scripts', 'allow-same-origin', 'allow-popups', 'allow-popups-to-escape-sandbox']));
+  });
+
+  test('넓은 화면은 목록 옆에 패널이 붙고, 좁은 화면(휴대폰)은 패널이 화면 전체를 덮는다', async ({ page }) => {
+    await openApp(page, '빼빼로');
+    await page.click('#view-start');
+    const vp = page.viewportSize();
+    const box = await page.locator('#panel').boundingBox();
+    if (vp.width >= 900) {
+      expect(box.x).toBeGreaterThanOrEqual(320);                 // 왼쪽에 목록 기둥
+      expect(Math.round(box.x + box.width)).toBe(vp.width);
+      expect(Math.round(box.height)).toBe(vp.height);
+      await expect(page.locator('#q')).toBeInViewport();         // 목록 쪽 검색창이 가려지지 않는다
+    } else {
+      expect(Math.round(box.x)).toBe(0);
+      expect(Math.round(box.y)).toBe(0);
+      expect(Math.round(box.width)).toBe(vp.width);
+      expect(Math.round(box.height)).toBe(vp.height);
+    }
   });
 });
 
@@ -164,11 +270,11 @@ test.describe('모두 새 탭으로 열기', () => {
 test('체크를 풀면 대상에서 빠지고, 새로고침해도 유지된다', async ({ page }) => {
   await stubOpen(page);
   await openApp(page, '의자');
-  const n = (await malls(page)).length;
-  await page.uncheck('[data-pick="coupang"]');
-  await page.uncheck('[data-pick="ikea"]');
+  const all = await malls(page);
+  await page.uncheck('[data-pick="coupang"]');   // 넘겨보기 대상
+  await page.uncheck('[data-pick="ikea"]');      // 새 창 전용 (넘겨보기 대상 아님)
   await expect(page.locator('.mall[data-mall="coupang"]')).toHaveClass(/off/);
-  await expect(page.locator('#view-start')).toHaveText(`${n - 2}곳 한 창에서 넘겨보기`);
+  await expect(page.locator('#view-start')).toHaveText(`${inPage(all).length - 1}곳 넘겨보기`);
 
   await page.reload();
   await page.waitForFunction(() => window.__ready === true);
@@ -176,7 +282,7 @@ test('체크를 풀면 대상에서 빠지고, 새로고침해도 유지된다',
   await expect(page.locator('[data-pick="ikea"]')).not.toBeChecked();
   await page.click('#open-tabs');
   const urls = (await opened(page)).map(c => c.url);
-  expect(urls).toHaveLength(n - 2);
+  expect(urls).toHaveLength(all.length - 2);
   expect(urls.some(u => u.includes('coupang.com') || u.includes('ikea.com'))).toBe(false);
 });
 
@@ -188,7 +294,7 @@ test('카테고리를 고르면 그 카테고리를 다루는 쇼핑몰만 보�
   await expect(page.locator('.mall')).toHaveCount(beauty.length);
   await expect(page.locator('.mall[data-mall="oliveyoung"]')).toBeVisible();
   await expect(page.locator('.mall[data-mall="ikea"]')).toHaveCount(0);
-  await expect(page.locator('#view-start')).toHaveText(`${beauty.length}곳 한 창에서 넘겨보기`);
+  await expect(page.locator('#view-start')).toHaveText(`${inPage(beauty).length}곳 넘겨보기`);
   await page.click('#open-tabs');
   expect(await opened(page)).toHaveLength(beauty.length);
 });
@@ -198,17 +304,19 @@ test('모두 해제하면 버튼이 꺼지고, 모두 선택하면 다시 켜진
   await page.click('#select-none');
   await expect(page.locator('#view-start')).toBeDisabled();
   await expect(page.locator('#open-tabs')).toBeDisabled();
-  await expect(page.locator('#view-start')).toHaveText('0곳 한 창에서 넘겨보기');
+  await expect(page.locator('#view-start')).toHaveText('0곳 넘겨보기');
   await page.click('#select-all');
   await expect(page.locator('#view-start')).toBeEnabled();
 });
 
 test('본 검색어는 최근 검색에 남고, 누르면 다시 검색되며, 지울 수 있다', async ({ page }) => {
-  await stubOpen(page);
+  await stubMalls(page);
   await openApp(page);
   for (const q of ['빼빼로', '선크림', '빼빼로']) {
     await page.fill('#q', q);
     await page.press('#q', 'Enter');
+    await page.keyboard.press('Escape');                     // 패널을 닫고 목록으로
+    await expect(page.locator('#panel')).toBeHidden();
   }
   await page.goto('/');
   await page.waitForFunction(() => window.__ready === true);
@@ -222,10 +330,11 @@ test('본 검색어는 최근 검색에 남고, 누르면 다시 검색되며, �
   await expect(page.locator('#recent')).toBeHidden();
 });
 
-test('?q= 주소로 열면 그 검색어로 시작한다 (창은 자동으로 열지 않는다)', async ({ page }) => {
+test('?q= 주소로 열면 그 검색어로 시작한다 (패널·창은 자동으로 열지 않는다)', async ({ page }) => {
   await stubOpen(page);
   await openApp(page, '세제');
   await expect(page.locator('#q')).toHaveValue('세제');
   await expect(page.locator('.mall-link[data-link="naver"]')).toHaveAttribute('href', /query=%EC%84%B8%EC%A0%9C/);
+  await expect(page.locator('#panel')).toBeHidden();
   expect(await opened(page)).toEqual([]);
 });

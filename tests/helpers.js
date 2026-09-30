@@ -8,14 +8,16 @@ function trackErrors(page) {
 
 // 실제 창을 열지 않도록 window.open 을 가짜 창으로 바꾼다.
 //   window.__opened : open 호출 기록 [{ url, name, features }]
-//   window.__nav    : 가짜 창의 location.href 에 넣은 주소 (결과 창 이동 기록)
-//   window.__windows: 만든 가짜 창들 (closed 를 바꿔 "사용자가 창을 닫음"을 흉내 낸다)
+//   window.__nav    : 가짜 창의 location.href 에 넣은 주소 (창 이동 기록)
+//   window.__windows: 만든 가짜 창들
+//   window.__focused: 가짜 창의 focus() 호출 횟수
 // blockAfter 가 숫자면 그 개수 이후의 호출은 팝업 차단처럼 null 을 돌려준다.
 async function stubOpen(page, blockAfter) {
   await page.addInitScript(n => {
     window.__opened = [];
     window.__nav = [];
     window.__windows = [];
+    window.__focused = 0;
     window.open = (url, name, features) => {
       window.__opened.push({ url, name, features });
       if (n != null && window.__opened.length > n) return null;
@@ -24,6 +26,7 @@ async function stubOpen(page, blockAfter) {
         closed: false,
         opener: window,
         close() { this.closed = true; },
+        focus() { window.__focused++; },
         location: {
           get href() { return href; },
           set href(v) { href = v; window.__nav.push(v); },
@@ -35,6 +38,15 @@ async function stubOpen(page, blockAfter) {
   }, blockAfter == null ? null : blockAfter);
 }
 
+// 쇼핑몰(https) 요청은 실제로 나가지 않게 가짜 페이지로 응답한다. 넘겨보기 패널의 iframe 도 여기에 걸린다.
+async function stubMalls(page) {
+  await page.context().route(/^https:\/\//, route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: '<!doctype html><meta charset="utf-8"><title>가짜 쇼핑몰</title><p>쇼핑몰 자리</p>',
+  }));
+}
+
 async function openApp(page, query) {
   await page.goto(query ? '/?q=' + encodeURIComponent(query) : '/');
   await page.waitForFunction(() => window.__ready === true);
@@ -44,5 +56,8 @@ const opened = page => page.evaluate(() => window.__opened);
 const nav = page => page.evaluate(() => window.__nav);
 const malls = page => page.evaluate(() => window.Malls.malls);
 const urlOf = (mall, q) => mall.url.replace('{q}', encodeURIComponent(q));
+const frameSrc = page => page.locator('#frame').getAttribute('src');
+// 기본 넘겨보기 순서: 새 창 전용(frame: false)은 뺀다
+const inPage = list => list.filter(m => m.frame !== false);
 
-module.exports = { trackErrors, stubOpen, openApp, opened, nav, malls, urlOf };
+module.exports = { trackErrors, stubOpen, stubMalls, openApp, opened, nav, malls, urlOf, frameSrc, inPage };

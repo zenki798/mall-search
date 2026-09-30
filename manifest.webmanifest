@@ -1,0 +1,18 @@
+{
+  "id": "./",
+  "name": "쇼핑몰 한번에 검색",
+  "short_name": "쇼핑검색",
+  "description": "검색어 하나로 여러 쇼핑몰의 검색 결과를 차례로 넘겨 봅니다.",
+  "lang": "ko",
+  "dir": "ltr",
+  "start_url": "./?source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f6f8",
+  "theme_color": "#f5f6f8",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

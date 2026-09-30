@@ -2,9 +2,19 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>쇼핑몰 한번에 검색</title>
-<link rel="icon" href="data:,">
+<meta name="description" content="검색어 하나로 여러 쇼핑몰의 검색 결과를 차례로 넘겨 봅니다.">
+<!-- 홈 화면에 추가하면 주소창·툴바 없이 앱처럼 뜬다 (AGENTS.md 3항 "앱(PWA)으로 설치") -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111418" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="쇼핑검색">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <style>
   :root {
     --bg: #f5f6f8;
@@ -34,7 +44,26 @@
     font: 15px/1.5 -apple-system, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
     word-break: keep-all;
   }
-  .wrap { max-width: 960px; margin: 0 auto; padding: 0 16px 48px; }
+  /* 노치·홈 표시줄이 있는 기기에서 내용이 가려지지 않게 안전 영역만큼 띄운다 */
+  .wrap {
+    max-width: 960px; margin: 0 auto;
+    padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) calc(48px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+
+  /* 앱(홈 화면)으로 실행 중일 때: 웹페이지 티가 나는 동작을 줄인다 */
+  html.app-mode { -webkit-tap-highlight-color: transparent; }
+  html.app-mode body { overscroll-behavior-y: none; }
+  html.app-mode button, html.app-mode .chip, html.app-mode .mall-link { -webkit-user-select: none; user-select: none; }
+  html.app-mode #open-tabs, html.app-mode .sub-actions { display: none; }
+
+  .install {
+    margin: 0 0 14px; padding: 10px 14px; border-radius: 12px; background: var(--accent-soft);
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 14px;
+  }
+  .install span { flex: 1; min-width: 180px; }
+  .install button { font: inherit; font-size: 14px; border: 0; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  #install-btn { background: var(--accent); color: #fff; font-weight: 700; }
+  #install-close { background: none; color: var(--muted); }
   header.top { padding: 28px 0 14px; }
   header.top h1 { margin: 0; font-size: 26px; letter-spacing: -.02em; }
   header.top p { margin: 4px 0 0; color: var(--muted); }
@@ -71,9 +100,10 @@
   .mall.current { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 
   /* 넘겨보기 중: 결과 창이 화면 오른쪽을 차지하므로 목록을 왼쪽에 붙인다 */
-  body.viewing .wrap { max-width: none; width: 34vw; min-width: 300px; margin: 0; }
-  body.viewing .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
-  body.viewing header.top p, body.viewing footer { display: none; }
+  /* (앱 모드에서는 결과가 앱 위에 겹쳐 뜨므로 적용하지 않는다) */
+  html:not(.app-mode) body.viewing .wrap { max-width: none; width: 34vw; min-width: 300px; margin: 0; }
+  html:not(.app-mode) body.viewing .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  html:not(.app-mode) body.viewing header.top p, html:not(.app-mode) body.viewing footer { display: none; }
 
   .recent { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 10px 0 0; font-size: 13px; color: var(--muted); }
   .recent button {
@@ -133,6 +163,12 @@
     <p>검색어 하나로 가격비교·오픈마켓·전문몰의 검색 결과를 바로 엽니다.</p>
   </header>
 
+  <div id="install-bar" class="install" role="note" hidden>
+    <span id="install-text"></span>
+    <button type="button" id="install-btn" hidden>앱으로 설치</button>
+    <button type="button" id="install-close" aria-label="안내 닫기">닫기</button>
+  </div>
+
   <form id="search-form" role="search">
     <input id="q" type="search" autocomplete="off" placeholder="상품명을 입력하세요 (예: 빼빼로)" aria-label="검색어">
     <button type="submit" id="view-start">한 창에서 넘겨보기</button>
@@ -150,7 +186,7 @@
       <button type="button" id="next">다음 ▶</button>
       <button type="button" id="viewer-close" class="ghost">결과 창 닫기</button>
     </div>
-    <div class="viewer-tip">← → 키로도 넘길 수 있습니다. 아래 쇼핑몰 이름을 누르면 그곳으로 바로 갑니다.</div>
+    <div class="viewer-tip" id="viewer-tip"></div>
   </div>
 
   <div class="bar">

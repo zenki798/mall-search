@@ -46,6 +46,8 @@
 | 체크·최근 검색 | 새로고침 후에도 유지된다 |
 | 카테고리 | 고른 카테고리를 다루는 쇼핑몰만 보이고 그곳만 열린다 |
 | `file://` 동작 | `index.html` 을 더블클릭해서 열어도 전부 정상 동작한다 |
+| 앱 설치(PWA) | 크롬 설치 불가 사유 0건, manifest `standalone`, 아이콘 실제 크기 일치, 오프라인에서도 화면이 뜬다 |
+| 앱 모드 | `?source=pwa` 로 열면 한 곳씩 열고 다음·이전으로 잇는다. 옆 창(popup)을 쓰지 않는다 |
 
 `npx playwright test` 는 외부 사이트에 접속하지 않는다(`window.open` 을 가로챈다).
 쇼핑몰 주소가 실제로 열리는지는 따로 `npm run check:links` 로 확인한다 (3항).
@@ -98,9 +100,32 @@
 index.html              화면 골격 + 스타일
 app.js                  검색 링크·한 창에서 넘겨보기·새 탭 열기·체크·카테고리·최근 검색
 data/malls.js           쇼핑몰 목록과 검색 주소 → window.Malls
+manifest.webmanifest    앱 정보 (홈 화면 설치)
+sw.js                   서비스 워커 (설치 조건 + 오프라인 화면)
+icons/                  앱 아이콘 PNG — scripts/make-icons.js 로 만든다 (직접 그리지 않는다)
 scripts/check-links.js  검색 주소가 실제로 열리는지 확인 (네트워크 필요)
 tests/
 ```
+
+### 앱(PWA)으로 설치
+
+홈 화면에 추가했을 때 주소창·툴바 없이 뜨도록 PWA 로 만들었다.
+- `display: "standalone"` 을 쓴다. `fullscreen` 은 시계·배터리 표시줄까지 숨기고 iOS 는 지원하지 않는다.
+- 설치 조건: manifest(이름·아이콘 192/512·start_url·display) + 서비스 워커 + https.
+  `tests/pwa.spec.js` 가 크롬 CDP `Page.getInstallabilityErrors` 로 설치 불가 사유 0건을 확인한다.
+- 서비스 워커는 **네트워크 우선**이다. 캐시 우선으로 바꾸면 새 버전을 올려도 사용자가 옛 화면을 계속 본다.
+  캐시할 파일을 바꾸면 `sw.js` 의 `CACHE` 이름(버전)을 올린다.
+- 아이폰은 설치 API 가 없어 사파리 공유 → "홈 화면에 추가" 를 글로 안내한다. `apple-*` meta 와
+  `apple-touch-icon`(180px, 배경을 끝까지 채움)이 있어야 아이폰에서도 앱처럼 뜬다.
+- 노치 기기를 위해 `viewport-fit=cover` + `env(safe-area-inset-*)` 여백을 준다.
+
+### 앱 모드의 넘겨보기
+
+앱으로 실행하면(`display-mode: standalone` 또는 start_url 의 `?source=pwa`) `html.app-mode` 가 붙는다.
+앱 밖 주소는 앱 위에 겹쳐 뜨는 브라우저로 열리고, 그 창을 앱이 계속 조종할 수 없다.
+그래서 앱 모드에서는 **누를 때마다 한 곳씩 새로 열고**(사용자가 닫고 돌아오므로 쌓이지 않는다),
+돌아오면 "다음 ▶"으로 이어 간다. 데스크톱의 "결과 창 하나 재사용"과 "모두 새 탭으로"는 쓰지 않는다.
+**실제 휴대폰에서 겹쳐 뜨는 브라우저의 모양은 기기·브라우저마다 다르고 자동 테스트로는 확인할 수 없다.**
 
 ### 왜 가격을 직접 가져오지 않는가 (2026-09-30 결정)
 

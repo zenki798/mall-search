@@ -15,7 +15,21 @@
     off: new Set(load(OFF_KEY, [])),
     recent: load(RECENT_KEY, []).filter(s => typeof s === 'string').slice(0, RECENT_MAX),
   };
-  const viewer = { win: null, id: null };
+  // 앱 모드: 홈 화면에 설치해서 실행한 경우. manifest 의 start_url 에 ?source=pwa 를 붙여 두었다.
+  // 앱 모드에서는 결과 창을 옆에 띄워 조종할 수 없다(휴대폰은 창을 나란히 못 띄우고, 앱 밖 주소는
+  // 앱 위에 겹쳐 뜨는 브라우저로 열린다). 그래서 쇼핑몰을 하나씩 열고, 닫고 돌아오면 "다음"으로 잇는다.
+  const APP_MODE = (() => {
+    try {
+      return window.matchMedia('(display-mode: standalone)').matches ||
+        window.matchMedia('(display-mode: fullscreen)').matches ||
+        navigator.standalone === true ||
+        new URL(location.href).searchParams.get('source') === 'pwa';
+    } catch (e) { return false; }
+  })();
+  document.documentElement.classList.toggle('app-mode', APP_MODE);
+
+  // win: 결과 창(데스크톱). active: 앱 모드에서 넘겨보기 중인지
+  const viewer = { win: null, id: null, active: false };
 
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
@@ -34,7 +48,7 @@
 
   const visible = () => M.malls.filter(m => state.category === 'all' || m.cats.includes(state.category));
   const targets = () => visible().filter(m => !state.off.has(m.id));
-  const viewerOpen = () => !!(viewer.win && !viewer.win.closed);
+  const viewerOpen = () => APP_MODE ? viewer.active : !!(viewer.win && !viewer.win.closed);
 
   // ── 렌더링 ──
   function drawCategories() {
@@ -94,6 +108,10 @@
     $('viewer-name').textContent = mall ? mall.name : '';
     $('prev').disabled = !(i > 0) && !(i < 0 && list.length);
     $('next').disabled = !(i < list.length - 1);
+    $('viewer-close').textContent = APP_MODE ? '넘겨보기 끝내기' : '결과 창 닫기';
+    $('viewer-tip').textContent = APP_MODE
+      ? '쇼핑몰을 다 봤으면 위쪽 닫기(✕)로 돌아와 다음 ▶ 을 누르세요.'
+      : '← → 키로도 넘길 수 있습니다. 아래 쇼핑몰 이름을 누르면 그곳으로 바로 갑니다.';
     const el = document.querySelector(`.mall[data-mall="${viewer.id}"]`);
     if (el) el.classList.add('current');
   }
@@ -145,6 +163,21 @@
   // (AGENTS.md 3항 "결과 창과 opener").
   function show(mall) {
     if (!state.query || !mall) return false;
+    if (APP_MODE) {
+      // 앱 모드: 누를 때마다 한 곳씩 연다. 사용자가 닫고 돌아오므로 탭이 쌓이지 않는다.
+      const w = window.open(M.searchUrl(mall, state.query), '_blank');
+      if (!w) {
+        notice('warn', '<strong>쇼핑몰을 열지 못했습니다.</strong> 아래 쇼핑몰 이름을 직접 눌러 주세요.');
+        return false;
+      }
+      try { w.opener = null; } catch (e) { /* 무시 */ }
+      viewer.active = true;
+      viewer.id = mall.id;
+      notice('', '');
+      remember(state.query);
+      drawViewer();
+      return true;
+    }
     if (!viewerOpen()) {
       // 새로고침으로 참조를 잃었어도 같은 이름의 창이 남아 있으면 그 창을 다시 쓴다
       const w = window.open('', VIEWER_NAME, viewerFeatures());
@@ -172,9 +205,10 @@
   }
 
   function closeViewer() {
-    if (viewerOpen()) viewer.win.close();
+    if (!APP_MODE && viewerOpen()) viewer.win.close();
     viewer.win = null;
     viewer.id = null;
+    viewer.active = false;
     drawViewer();
   }
 
@@ -198,7 +232,9 @@
   }
 
   // 결과 창이 닫혔는지 가끔 확인해서 넘겨보기 막대를 정리한다
-  setInterval(() => { if (viewer.id && !viewerOpen()) { viewer.win = null; viewer.id = null; drawViewer(); } }, 1000);
+  if (!APP_MODE) {
+    setInterval(() => { if (viewer.id && !viewerOpen()) { viewer.win = null; viewer.id = null; drawViewer(); } }, 1000);
+  }
 
   // ── 이벤트 ──
   $('q').addEventListener('input', e => { notice('', ''); setQuery(e.target.value); });
@@ -241,6 +277,14 @@
   $('malls').addEventListener('click', e => {
     const a = e.target.closest('.mall-link[href]');
     if (!a) return;
+    // 앱 모드: 링크는 원래대로 열고(앱 위 브라우저), 넘겨보기 위치만 그곳으로 옮긴다
+    if (APP_MODE) {
+      viewer.active = true;
+      viewer.id = a.dataset.link;
+      remember(state.query);
+      drawViewer();
+      return;
+    }
     // 결과 창이 열려 있으면 새 탭 대신 그 창에서 보여 준다. Ctrl·가운데 클릭은 원래대로 새 탭.
     if (viewerOpen() && !(e.ctrlKey || e.metaKey || e.shiftKey || e.button === 1)) {
       e.preventDefault();
@@ -268,6 +312,42 @@
     const b = e.target.closest('[data-recent]');
     if (b) { notice('', ''); setQuery(b.dataset.recent); }
   });
+
+  // ── 앱 설치 안내 ──
+  // 안드로이드 크롬: 설치 가능하면 beforeinstallprompt 가 온다 → "앱으로 설치" 버튼.
+  // 아이폰 사파리: 설치 API 가 없다 → 공유 메뉴에서 추가하는 방법을 글로 안내한다.
+  const INSTALL_KEY = 'mallsearch.installHint.v1';
+  let installEvent = null;
+  function installDismissed() { try { return localStorage.getItem(INSTALL_KEY) === 'off'; } catch (e) { return false; } }
+  function showInstall(text, withButton) {
+    if (APP_MODE || installDismissed()) return;
+    $('install-text').textContent = text;
+    $('install-btn').hidden = !withButton;
+    $('install-bar').hidden = false;
+  }
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    installEvent = e;
+    showInstall('홈 화면에 설치하면 주소창 없이 앱처럼 쓸 수 있어요.', true);
+  });
+  window.addEventListener('appinstalled', () => { $('install-bar').hidden = true; });
+  $('install-btn').addEventListener('click', () => {
+    if (!installEvent) return;
+    installEvent.prompt();
+    installEvent.userChoice.finally(() => { installEvent = null; $('install-bar').hidden = true; });
+  });
+  $('install-close').addEventListener('click', () => {
+    $('install-bar').hidden = true;
+    try { localStorage.setItem(INSTALL_KEY, 'off'); } catch (e) { /* 무시 */ }
+  });
+  if (/iPhone|iPad|iPod/.test(navigator.userAgent) && /^https:$/.test(location.protocol)) {
+    showInstall('앱처럼 쓰려면: 사파리 아래쪽 공유 버튼(□↑) → "홈 화면에 추가"', false);
+  }
+
+  // 서비스 워커: 설치 조건을 채우고 오프라인에서도 화면을 띄운다. file:// 에서는 쓸 수 없다.
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    navigator.serviceWorker.register('sw.js').catch(() => { /* 실패해도 페이지는 동작한다 */ });
+  }
 
   // ── 시작 ──
   let initial = '';

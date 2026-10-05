@@ -4,6 +4,15 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  # 막힘 자동 점검(frame-check.yml)이 상태 파일을 고쳐 커밋한 뒤 다시 배포할 때 부른다.
+  # (자동 커밋은 GITHUB_TOKEN 으로 push 하므로 위의 push 이벤트가 일어나지 않는다)
+  workflow_call:
+    inputs:
+      ref:
+        description: 배포할 브랜치·커밋 (비우면 이 실행을 일으킨 커밋)
+        type: string
+        required: false
+        default: ''
 
 # Pages 배포에 필요한 최소 권한만 부여한다.
 permissions:
@@ -23,6 +32,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
 
       - uses: actions/setup-node@v4
         with:
@@ -55,6 +66,8 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
 
       - uses: actions/configure-pages@v5
 
@@ -63,7 +76,7 @@ jobs:
         run: |
           mkdir -p _site/data _site/icons
           cp index.html app.js manifest.webmanifest sw.js _site/
-          cp data/malls.js _site/data/
+          cp data/malls.js data/frame-status.js _site/data/
           cp icons/*.png _site/icons/
           find _site -type f
 

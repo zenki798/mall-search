@@ -2,7 +2,7 @@
 const { test, expect } = require('@playwright/test');
 const path = require('path');
 const { pathToFileURL } = require('url');
-const { trackErrors, stubOpen, stubMalls, opened, urlOf, inPage } = require('./helpers');
+const { trackErrors, stubOpen, stubMalls, opened, malls, urlOf, inPage } = require('./helpers');
 
 const FILE_URL = pathToFileURL(path.join(__dirname, '..', 'index.html')).href;
 
@@ -12,7 +12,7 @@ test('file:// 로 열어도 링크 만들기·체크·넘겨보기(패널)·새 
   await stubOpen(page);
   await page.goto(FILE_URL);
   await page.waitForFunction(() => window.__ready === true);
-  const all = await page.evaluate(() => window.Malls.malls);
+  const all = await malls(page);   // 기기에 맞는 주소로 (휴대폰 전용 주소가 있는 곳)
   const list = inPage(all);
 
   await page.fill('#q', '빼빼로');

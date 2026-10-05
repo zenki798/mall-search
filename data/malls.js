@@ -40,7 +40,8 @@
     { id: 'coupang', name: '쿠팡', group: 'open', cats: ALL, frame: false, url: 'https://www.coupang.com/np/search?q={q}', blocked: true },
     { id: 'gmarket', name: 'G마켓', group: 'open', cats: ALL, frame: false, url: 'https://www.gmarket.co.kr/n/search?keyword={q}', blocked: true },
     { id: 'auction', name: '옥션', group: 'open', cats: ALL, frame: false, url: 'https://www.auction.co.kr/n/search?keyword={q}' },
-    { id: '11st', name: '11번가', group: 'open', cats: ALL, frame: true, url: 'https://search.11st.co.kr/pc/total-search?kwd={q}' },
+    // 11번가: 2026-10-05 모든 기기에 X-Frame-Options: DENY 를 보내기 시작 (9-30 에는 없었다) → 새 창 전용
+    { id: '11st', name: '11번가', group: 'open', cats: ALL, frame: false, url: 'https://search.11st.co.kr/pc/total-search?kwd={q}' },
 
     { id: 'ssg', name: 'SSG닷컴', group: 'mall', cats: ALL, url: 'https://www.ssg.com/search.ssg?target=all&query={q}', blocked: true },
     // 롯데ON: 안드로이드면 태블릿(Mobile 표시 없음)도 휴대폰 주소(platform=m)로 넘긴다 (2026-09-30 실측)
@@ -54,7 +55,9 @@
     { id: 'emart', name: '이마트몰', group: 'specialty', cats: ['food', 'goods'], url: 'https://emart.ssg.com/search.ssg?query={q}', blocked: true },
     { id: 'homeplus', name: '홈플러스', group: 'specialty', cats: ['food', 'goods'], frame: true, url: 'https://front.homeplus.co.kr/search?entry=direct&keyword={q}' },
     { id: 'kurly', name: '마켓컬리', group: 'specialty', cats: ['food', 'goods', 'beauty'], frame: true, url: 'https://www.kurly.com/search?sword={q}' },
-    { id: 'oliveyoung', name: '올리브영', group: 'specialty', cats: ['beauty', 'goods'], frame: true, url: 'https://www.oliveyoung.co.kr/store/search/getSearchMain.do?query={q}' },
+    // 올리브영: 2026-10-05 PC 접속에 Cloudflare "사람인지 확인" 화면을 띄우기 시작. 그 화면이 페이지 안 표시를
+    // 거부(SAMEORIGIN)해서 패널이 막힌다. 새 탭에서는 체크하면 통과. 휴대폰도 언제든 같아질 수 있어 새 창 전용
+    { id: 'oliveyoung', name: '올리브영', group: 'specialty', cats: ['beauty', 'goods'], frame: false, url: 'https://www.oliveyoung.co.kr/store/search/getSearchMain.do?query={q}' },
     // 다이소몰: 예전 주소(/ssn/search/Search)는 검색 화면이 아니라 데이터(JSON)였다. 아래는 사이트에서 직접 검색해 얻은 주소.
     // 휴대폰 주소는 사이트가 검색엔진에 알려 주는 공식 검색 주소(SearchAction). "Mobile" 표시가 있어야 휴대폰으로 본다
     // — 갤럭시탭(Mobile 없음)은 PC 주소. 휴대폰에 PC 주소를 주면 새 탭에서도 404 다 (2026-09-30 실측)

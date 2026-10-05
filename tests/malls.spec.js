@@ -53,8 +53,8 @@ test('페이지 안 표시 여부(frame): 확인된 곳이 넘겨보기의 대�
     };
   });
   expect(r.inPage).toBeGreaterThanOrEqual(10);
-  // 2026-09-30 실측: X-Frame-Options / frame-ancestors 로 거부 (AGENTS.md 3항)
-  expect(r.external).toEqual(expect.arrayContaining(['naver', 'enuri', 'coupang', 'gmarket', 'auction', 'ohou', 'ikea']));
+  // 2026-09-30 실측: X-Frame-Options / frame-ancestors 로 거부 (AGENTS.md 3항). 2026-10-05: 11번가·올리브영 추가
+  expect(r.external).toEqual(expect.arrayContaining(['naver', 'enuri', 'coupang', 'gmarket', 'auction', '11st', 'oliveyoung', 'ohou', 'ikea']));
 });
 
 test.describe('기기별 주소 (휴대폰 전용 주소가 있는 쇼핑몰)', () => {

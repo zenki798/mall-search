@@ -62,8 +62,14 @@
   }
 
   const mallById = id => M.malls.find(m => m.id === id);
-  const external = m => m.frame === false;               // 페이지 안 표시를 거부한다 → 새 창으로
+  // 매일 자동 점검(scripts/frame-check.js)이 "새로 페이지 안 표시를 거부" 로 적은 쇼핑몰. 파일이 없어도 동작한다.
+  const AUTO_BLOCKED = (window.FrameStatus && window.FrameStatus.blocked) || {};
+  // 새 창으로 여는 곳: 사람이 정한 새 창 전용(frame: false) + 자동 점검에서 막힌 곳
+  const external = m => m.frame === false || Object.prototype.hasOwnProperty.call(AUTO_BLOCKED, m.id);
   const unverified = m => m.frame !== true && m.frame !== false;
+  const extTitle = m => AUTO_BLOCKED[m.id]
+    ? `자동 점검(${AUTO_BLOCKED[m.id].since})에서 페이지 안 표시 거부를 확인해 새 창으로 엽니다`
+    : '이 쇼핑몰은 새 창으로 열립니다';
   const visible = () => M.malls.filter(m => state.category === 'all' || m.cats.includes(state.category));
   const targets = () => visible().filter(m => !state.off.has(m.id));
   // 넘겨보기 순서: 체크한 곳. 새 창 전용은 "포함" 을 켰을 때만 넣는다.
@@ -98,7 +104,7 @@
       const link = q
         ? `href="${esc(M.searchUrl(m, q, UA))}" target="_blank" rel="noopener noreferrer"`
         : 'aria-disabled="true"';
-      const ext = external(m) ? ' <small class="ext" title="이 쇼핑몰은 새 창으로 열립니다">새 창</small>' : '';
+      const ext = external(m) ? ` <small class="ext" title="${esc(extTitle(m))}">새 창</small>` : '';
       return `
       <div class="mall${on ? '' : ' off'}" data-mall="${esc(m.id)}">
         <label class="pick"><input type="checkbox" data-pick="${esc(m.id)}" ${on ? 'checked' : ''} aria-label="${esc(m.name)} 포함"></label>

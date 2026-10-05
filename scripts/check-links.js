@@ -29,13 +29,11 @@ const QUERY = process.argv[2] || '빼빼로';
 const PC_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 const IPHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
 
+// 판정 규칙은 자동 점검(frame-check.js)과 같은 것을 쓴다 (scripts/frame-rules.js)
+const rules = require('./frame-rules');
 function frameVerdict(status, headers) {
-  if (status === 403 || status === 429) return '?';
-  const xfo = (headers['x-frame-options'] || '').toUpperCase();
-  const fa = ((headers['content-security-policy'] || '').match(/frame-ancestors([^;]*)/i) || [])[1];
-  if (/DENY|SAMEORIGIN/.test(xfo)) return '거부';
-  if (fa != null && !/(^|\s)(\*|https:)(\s|$)/.test(fa.trim())) return '거부';
-  return '허용';
+  const { verdict } = rules.frameVerdict(status, headers);
+  return verdict === 'allow' ? '허용' : verdict === 'refuse' ? '거부' : '?';
 }
 
 async function check(ctx, m, ua, label) {

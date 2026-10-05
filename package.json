@@ -9,6 +9,7 @@
     "test:ui": "playwright test --ui",
     "report": "playwright show-report",
     "check:links": "node scripts/check-links.js",
+    "check:frames": "node scripts/frame-check.js",
     "make:icons": "node scripts/make-icons.js"
   },
   "devDependencies": {

@@ -405,3 +405,38 @@ test('PC 에서는 PC 주소를 쓴다', async ({ page }) => {
     .toHaveAttribute('href', 'https://www.daisomall.co.kr/ds/dst/SCR_DST_0015?searchTerm=' + encodeURIComponent('빼빼로'));
   await expect(page.locator('.mall-link[data-link="lotteon"]')).toHaveAttribute('href', /platform=pc&/);
 });
+
+test.describe('막힘 자동 점검 결과 반영 (data/frame-status.js)', () => {
+  // 자동 점검이 "다나와가 새로 막혔다" 고 적었다고 가정한다
+  const STATUS = 'window.FrameStatus = { "lastChange": "2026-10-05", "blocked": { "danawa": { "reason": "X-Frame-Options: DENY", "since": "2026-10-05" } } };';
+
+  test('자동 점검에서 막힌 쇼핑몰은 "새 창" 표시가 붙고, 누르면 패널이 아니라 새 창으로 열리며, 넘겨보기에서 빠진다', async ({ page }) => {
+    await page.route('**/data/frame-status.js', r => r.fulfill({ contentType: 'text/javascript; charset=utf-8', body: STATUS }));
+    await stubMalls(page);
+    await stubOpen(page);
+    await openApp(page, '빼빼로');
+    const all = await malls(page);
+    const route = inPage(all).filter(m => m.id !== 'danawa');
+
+    const tag = page.locator('.mall-link[data-link="danawa"] .ext');
+    await expect(tag).toHaveCount(1);
+    await expect(tag).toHaveAttribute('title', /자동 점검\(2026-10-05\)/);
+    await expect(page.locator('#view-start')).toHaveText(`${route.length}곳 넘겨보기`);
+
+    await page.click('.mall-link[data-link="danawa"]');
+    await expect(page.locator('#panel')).toBeHidden();
+    expect(await opened(page)).toHaveLength(1);
+
+    await page.click('#view-start');
+    await expect(page.locator('#frame')).toHaveAttribute('src', urlOf(route[0], '빼빼로'));
+  });
+
+  test('상태 파일이 없거나 깨져도 화면은 그대로 동작한다', async ({ page }) => {
+    await page.route('**/data/frame-status.js', r => r.fulfill({ status: 404, body: '' }));
+    await stubMalls(page);
+    await openApp(page, '빼빼로');
+    const all = await malls(page);
+    await expect(page.locator('#view-start')).toHaveText(`${inPage(all).length}곳 넘겨보기`);
+    await expect(page.locator('.mall-link[data-link="danawa"] .ext')).toHaveCount(0);
+  });
+});

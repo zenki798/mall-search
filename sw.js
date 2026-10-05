@@ -1,9 +1,9 @@
 /* 서비스 워커 — 앱 설치 조건을 채우고, 오프라인에서도 화면이 뜨게 한다.
    네트워크 우선: 새 버전을 올리면 다음 실행 때 바로 반영되고, 연결이 없을 때만 캐시를 쓴다.
    쇼핑몰(다른 출처) 요청은 건드리지 않는다. */
-const CACHE = 'mallsearch-v1';
+const CACHE = 'mallsearch-v2';
 const SHELL = [
-  './', 'index.html', 'app.js', 'data/malls.js', 'manifest.webmanifest',
+  './', 'index.html', 'app.js', 'data/malls.js', 'data/frame-status.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
 ];
 
